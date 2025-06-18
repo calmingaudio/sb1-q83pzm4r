@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, ColorValue, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Colors from '@/constants/Colors';
 import { breathingPatterns } from '@/constants/BreathingPatterns';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import BreathingExercise from '../../components/breathing/BreathingExercise';
+import { ExternalLink } from 'lucide-react-native';
 
 export default function BreatheScreen() {
   const [selectedPattern, setSelectedPattern] = useState(null);
@@ -15,13 +16,14 @@ export default function BreatheScreen() {
   }
   
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={["left", "right", "bottom"]}>
       <LinearGradient
-        colors={Colors.light.gradient.primary}
+        colors={Colors.light.gradient.primary as [ColorValue, ColorValue, ...ColorValue[]]}
         style={styles.header}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
       >
+        
         <Animated.View 
           style={styles.headerContent}
           entering={FadeInDown.delay(100).springify()}
@@ -42,7 +44,7 @@ export default function BreatheScreen() {
               style={styles.patternCard}
             >
               <LinearGradient
-                colors={Colors.light.gradient.primary}
+                colors={Colors.light.gradient.primary as [ColorValue, ColorValue, ...ColorValue[]]}
                 style={styles.patternHeader}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
@@ -84,6 +86,14 @@ export default function BreatheScreen() {
                     <Text key={idx} style={styles.benefitText}>• {benefit}</Text>
                   ))}
                 </View>
+
+                <TouchableOpacity
+                  style={styles.sourceButton}
+                  onPress={() => Linking.openURL(pattern.citationUrl)}
+                >
+                  <ExternalLink size={16} color={Colors.light.primary} />
+                  <Text style={styles.sourceButtonText}>View Source</Text>
+                </TouchableOpacity>
               </View>
             </TouchableOpacity>
           </Animated.View>
@@ -197,5 +207,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.light.textSecondary,
     lineHeight: 20,
+  },
+  sourceButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: 20,
+    paddingVertical: 12,
+    backgroundColor: Colors.light.backgroundSecondary,
+    borderRadius: 12,
+  },
+  sourceButtonText: {
+    fontFamily: "Inter-SemiBold",
+    fontSize: 14,
+    color: Colors.light.primary,
   },
 });

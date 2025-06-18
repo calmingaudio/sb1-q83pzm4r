@@ -2,7 +2,6 @@ import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform, ScrollView, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Volume2, VolumeX } from 'lucide-react-native';
 import Colors from '@/constants/Colors';
 import { router, useNavigation } from 'expo-router';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
@@ -104,7 +103,6 @@ export default function SOSScreen() {
   const [showWelcome, setShowWelcome] = useState(true);
   const [showSlides, setShowSlides] = useState(false);
   const [currentSlide, setCurrentSlide] = useState(1);
-  const [soundEnabled, setSoundEnabled] = useState(false);
   const [isAlternateSet, setIsAlternateSet] = useState(false);
   const scrollViewRef = useRef(null);
   const navigation = useNavigation();
@@ -115,7 +113,6 @@ export default function SOSScreen() {
       setShowSlides(false);
       setCurrentSlide(1);
       setIsAlternateSet(false);
-      setSoundEnabled(false);
     });
 
     return unsubscribe;
@@ -151,7 +148,7 @@ export default function SOSScreen() {
 
   if (showWelcome) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} edges={["left", "right", "bottom"]}>
         <LinearGradient
           colors={Colors.light.gradient.primary}
           style={styles.welcomeGradient}
@@ -188,6 +185,16 @@ export default function SOSScreen() {
                 <Text style={styles.feelingGoodButtonText}>😊 I'm Okay - Take Me to Breathe</Text>
               </TouchableOpacity>
             </View>
+
+            {/* Disclaimer Section */}
+            <View style={styles.disclaimerContainer}>
+              <Text style={styles.disclaimerText}>
+                This feature is for emotional support and is not a substitute
+                for professional medical advice. If you are in a crisis or
+                believe you are having a medical emergency, please contact a
+                healthcare professional or emergency services.
+              </Text>
+            </View>
           </Animated.View>
         </LinearGradient>
       </SafeAreaView>
@@ -197,20 +204,7 @@ export default function SOSScreen() {
   if (!showSlides) return null;
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity 
-          style={styles.soundButton}
-          onPress={() => setSoundEnabled(!soundEnabled)}
-        >
-          {soundEnabled ? (
-            <Volume2 size={24} color={Colors.light.textSecondary} />
-          ) : (
-            <VolumeX size={24} color={Colors.light.textSecondary} />
-          )}
-        </TouchableOpacity>
-      </View>
-
+    <View style={styles.container}>
       <ScrollView
         ref={scrollViewRef}
         horizontal
@@ -290,7 +284,7 @@ export default function SOSScreen() {
           />
         ))}
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -379,6 +373,20 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: Colors.light.primary,
     textAlign: 'center',
+  },
+  disclaimerContainer: {
+    marginTop: 48,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: "rgba(0, 0, 0, 0.1)",
+    borderRadius: 12,
+  },
+  disclaimerText: {
+    fontFamily: "Inter-Regular",
+    fontSize: 13,
+    color: "rgba(255, 255, 255, 0.8)",
+    textAlign: "center",
+    lineHeight: 18,
   },
   header: {
     padding: 16,
