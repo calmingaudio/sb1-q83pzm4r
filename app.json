@@ -34,7 +34,8 @@
       "expo-router",
       "expo-font",
       "expo-web-browser",
-      "expo-apple-authentication"
+      "expo-apple-authentication",
+      "expo-av"
     ],
     "experiments": {
       "typedRoutes": true

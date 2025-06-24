@@ -9,6 +9,7 @@ import {
   Image,
   Platform,
   ColorValue,
+  Dimensions
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import {
@@ -17,16 +18,34 @@ import {
   CircleAlert as AlertCircle,
   BookType,
   Settings,
+  Shield, 
+  PenTool,
+  Sparkles, 
+  RefreshCw, 
+  Info, 
+  Zap, 
+  Music, 
+  Brain, 
+  Headphones, 
+  Heart, 
+  Plane, 
+  Volume2
 } from "lucide-react-native";
 import Colors from "@/constants/Colors";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
-import Animated, { FadeInDown, FadeInRight } from "react-native-reanimated";
+import Animated, { FadeInDown, FadeInRight, FadeInUp } from "react-native-reanimated";
 import { useAuthentication } from "@/hooks/useAuthentication";
 import { useDailyTip } from "@/hooks/useDailyTip";
+import { useAviationStats } from '@/hooks/useAviationStats';
+import { useTheme } from '@/components/ThemeProvider';
+
 
 const AnimatedTouchableOpacity =
   Animated.createAnimatedComponent(TouchableOpacity);
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
 
 // Type definitions
 type QuickActionType = "breathe" | "sos" | "learn" | "journal";
@@ -41,10 +60,13 @@ interface QuickAction {
 }
 
 export default function HomeScreen() {
+  const { colors } = useTheme();
   const { profile } = useAuthentication();
   const dailyTip = useDailyTip();
   const greeting = getGreeting();
   const insets = useSafeAreaInsets();
+  const { currentStat, isLoading, getNextStat } = useAviationStats();
+
 
   const firstName = profile?.firstName || "Traveler";
 
@@ -55,33 +77,67 @@ export default function HomeScreen() {
     return "Good evening";
   }
 
-  const handleQuickAction = (action: QuickActionType): void => {
+  const handleQuickAction = (action: string) => {
     switch (action) {
-      case "breathe":
-        router.push("/(tabs)/breathe");
+      case 'breathe':
+        router.push('/(tabs)/breathe');
         break;
-      case "sos":
-        router.push("/(tabs)/sos");
+      case 'sos':
+        router.push('/(tabs)/sos');
         break;
-      case "learn":
-        router.push("/(tabs)/learn");
+      case 'learn':
+        router.push('/(tabs)/learn');
         break;
-      case "journal":
-        router.push("/(tabs)/journal");
+      case 'journal':
+        router.push('/(tabs)/journal');
+        break;
+      case 'music':
+        router.push('/(tabs)/music');
+        break;
+      case 'nature-sounds':
+        // TODO: Implement music tab with nature category
+        break;
+      case 'relaxing-music':
+        // TODO: Implement music tab with music category
+        break;
+      case 'pre-flight-meditation':
+        // TODO: Implement music tab with pre-flight meditation category
+        break;
+      case 'in-flight-meditation':
+        // TODO: Implement music tab with in-flight meditation category
+        break;
+      case 'getting-ready-meditation':
+        // TODO: Implement music tab with getting ready meditation category
         break;
     }
   };
 
-  const handleLearnMore = (categoryId: CategoryType): void => {
+  const getCategoryColor = (category: string) => {
+    switch (category) {
+      case 'safety': return '#10b981';
+      case 'training': return '#6366f1';
+      case 'technology': return '#06b6d4';
+      case 'statistics': return '#f59e0b';
+      default: return colors.primary;
+    }
+  };
+
+
+
+  const handleLearnMore = (categoryId: string) => {
+    // Navigate to category
     router.push({
-      pathname: "/(tabs)/learn",
-      params: { category: categoryId },
+      pathname: '/(tabs)/learn',
+      params: { category: categoryId }
     });
   };
 
   const handleSettingsPress = (): void => {
     router.push("/profile");
   };
+
+  const styles = createStyles(colors);
+
 
   const quickActions: QuickAction[] = [
     {
@@ -116,7 +172,6 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Settings Button - Positioned absolutely */}
       <TouchableOpacity
         style={[
           styles.settingsButton,
@@ -138,359 +193,605 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {/* Welcome Header */}
-        <View style={styles.headerContainer}>
-          <Animated.View
-            style={styles.welcomeHeader}
-            entering={FadeInDown.delay(50).springify()}
-          >
-            <Text style={styles.greeting}>{greeting},</Text>
-            <Text style={styles.userName}>
-              {firstName}
-            </Text>
-            <Text style={styles.welcomeMessage}>
-              Ready for a peaceful journey?
-            </Text>
-          </Animated.View>
-        </View>
-
-        {/* Quick Action Cards */}
-        <View style={styles.quickActions}>
-          {quickActions.map((action, index) => (
-            <AnimatedTouchableOpacity
-              key={`${action.action}-${index}`}
-              entering={FadeInDown.delay(action.delay).springify()}
-              onPress={() => handleQuickAction(action.action)}
-              style={styles.quickActionWrapper}
-              accessible={true}
-              accessibilityLabel={action.text}
-              accessibilityRole="button"
-            >
-              <LinearGradient
-                colors={Colors.light.gradient.primary as [ColorValue, ColorValue, ...ColorValue[]]}
-                style={styles.quickActionCard}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-              >
-                <View style={styles.quickActionIcon}>
-                  <action.icon size={24} color="#ffffff" />
-                </View>
-                <Text style={styles.quickActionText}>{action.text}</Text>
-              </LinearGradient>
-            </AnimatedTouchableOpacity>
-          ))}
-        </View>
-
-        {/* Personalized Recommendations */}
-        <Animated.View
-          style={styles.section}
-          entering={FadeInRight.delay(500).springify()}
+        {/* Modern Header */}
+        <Animated.View 
+          style={styles.headerContainer}
+          entering={FadeInUp.delay(100).springify()}
         >
-          <Text style={styles.sectionTitle}>Personalized For You</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.recommendationsScroll}
-            contentContainerStyle={styles.recommendationsContent}
+          <View style={styles.headerContent}>
+            <View style={styles.greetingSection}>
+              <Text style={styles.greeting}>{greeting}</Text>
+              <Text style={styles.userName}>{firstName} ✈️</Text>
+              <Text style={styles.welcomeMessage}>Ready for peaceful skies?</Text>
+            </View>
+            <TouchableOpacity 
+              style={styles.settingsButton}
+              onPress={() => router.push('/profile')}
+            >
+              <Settings size={22} color={colors.textSecondary} strokeWidth={2} />
+            </TouchableOpacity>
+          </View>
+          
+          {/* Compact Aviation Safety Fact */}
+          <Animated.View 
+            style={styles.aviationFactContainer}
+            entering={FadeInRight.delay(200).springify()}
           >
-            <TouchableOpacity 
-              onPress={() => handleLearnMore("turbulence")}
-              accessible={true}
-              accessibilityLabel="Understanding Turbulence"
-            >
-              <LinearGradient
-                colors={Colors.light.gradient.primary as [ColorValue, ColorValue, ...ColorValue[]]}
-                style={styles.recommendationCard}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-              >
-                <Image
-                  source={{
-                    uri: "https://images.pexels.com/photos/2007401/pexels-photo-2007401.jpeg",
-                  }}
-                  style={styles.recommendationImage}
-                />
-                <View style={styles.recommendationContentContainer}>
-                  <Text style={styles.recommendationTitle}>
-                    Understanding Turbulence
-                  </Text>
-                  <Text style={styles.recommendationDescription}>
-                    Learn what causes turbulence and why it's a normal part of
-                    flying
-                  </Text>
+            {!isLoading && currentStat && (
+              <View style={styles.aviationFactCard}>
+                <View style={styles.aviationFactHeader}>
+                  <View style={styles.aviationFactIcon}>
+                    <Zap size={16} color={getCategoryColor(currentStat.category)} strokeWidth={2.5} />
+                  </View>
+                  <View style={[styles.factCategoryBadge, { backgroundColor: getCategoryColor(currentStat.category) }]}>
+                    <Text style={styles.factCategoryText}>{currentStat.category.toUpperCase()}</Text>
+                  </View>
+                  <TouchableOpacity onPress={getNextStat} style={styles.factRefreshButton}>
+                    <RefreshCw size={14} color={colors.textSecondary} strokeWidth={2} />
+                  </TouchableOpacity>
                 </View>
-              </LinearGradient>
+                <Text style={styles.aviationFactTitle}>{currentStat.title}</Text>
+                <Text style={styles.aviationFactDescription}>{currentStat.description}</Text>
+              </View>
+            )}
+          </Animated.View>
+        </Animated.View>
+
+        {/* Quick Actions Grid */}
+        <Animated.View 
+          style={styles.quickActionsContainer}
+          entering={FadeInDown.delay(300).springify()}
+        >
+          <Text style={styles.sectionTitle}>Quick Actions</Text>
+          <View style={styles.quickActions}>
+            {[
+              { 
+                icon: Wind, 
+                text: 'Breathing Exercise',
+                subtitle: 'Calm your mind',
+                gradient: colors.gradient.primary as [ColorValue, ColorValue, ...ColorValue[]],
+                delay: 400,
+                action: 'breathe'
+              },
+              { 
+                icon: Heart, 
+                text: 'Getting Ready Meditations',
+                subtitle: 'Prepare for your journey',
+                gradient: ['#f59e0b', '#f97316'] as [ColorValue, ColorValue],
+                delay: 450,
+                action: 'getting-ready-meditation'
+              },
+              { 
+                icon: Brain, 
+                text: 'Pre-Flight Calm Meditations',
+                subtitle: 'Guided meditation',
+                gradient: ['#8b5cf6', '#a855f7'] as [ColorValue, ColorValue],
+                delay: 500,
+                action: 'pre-flight-meditation'
+              },
+              { 
+                icon: Plane, 
+                text: 'Onboard Ease Meditations',
+                subtitle: 'Peaceful journey',
+                gradient: ['#06b6d4', '#22d3ee'] as [ColorValue, ColorValue],
+                delay: 550,
+                action: 'in-flight-meditation'
+              },
+              { 
+                icon: Shield, 
+                text: 'Emergency SOS',
+                subtitle: 'Instant relief',
+                gradient: ['#ef4444', '#f87171'] as [ColorValue, ColorValue],
+                delay: 600,
+                action: 'sos'
+              },
+              { 
+                icon: BookOpen, 
+                text: 'Flight Q&A\'s',
+                subtitle: 'Understanding flight',
+                gradient: colors.gradient.accent as [ColorValue, ColorValue, ...ColorValue[]],
+                delay: 650,
+                action: 'learn'
+              },
+              { 
+                icon: PenTool, 
+                text: 'Journal Entry',
+                subtitle: 'Track your progress',
+                gradient: colors.gradient.secondary as [ColorValue, ColorValue, ...ColorValue[]],
+                delay: 700,
+                action: 'journal'
+              },
+              { 
+                icon: Volume2, 
+                text: 'Nature Sounds',
+                subtitle: 'Calming natural audio',
+                gradient: ['#10b981', '#34d399'] as [ColorValue, ColorValue],
+                delay: 750,
+                action: 'nature-sounds'
+              },
+              { 
+                icon: Music, 
+                text: 'Relaxing Music',
+                subtitle: 'Peaceful melodies',
+                gradient: ['#8b5cf6', '#c084fc'] as [ColorValue, ColorValue],
+                delay: 800,
+                action: 'relaxing-music'
+              },
+            ].map((action, index) => (
+              <AnimatedTouchableOpacity
+                key={index}
+                entering={FadeInDown.delay(action.delay).springify()}
+                onPress={() => handleQuickAction(action.action)}
+                style={styles.quickActionWrapper}
+              >
+                <LinearGradient
+                  colors={action.gradient}
+                  style={styles.quickActionCard}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                >
+                  <View style={styles.quickActionIconContainer}>
+                    <action.icon size={28} color="#ffffff" strokeWidth={2.5} />
+                  </View>
+                  <View style={styles.quickActionTextContainer}>
+                    <Text style={styles.quickActionText}>{action.text}</Text>
+                    <Text style={styles.quickActionSubtitle}>{action.subtitle}</Text>
+                  </View>
+                </LinearGradient>
+              </AnimatedTouchableOpacity>
+            ))}
+          </View>
+        </Animated.View>
+
+        {/* Featured Content */}
+        <Animated.View 
+          style={styles.section}
+          entering={FadeInRight.delay(600).springify()}
+        >
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Featured for You</Text>
+            <TouchableOpacity onPress={() => router.push('/(tabs)/learn')}>
+              <Text style={styles.seeAllText}>See all</Text>
+            </TouchableOpacity>
+          </View>
+          
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false} 
+            style={styles.featuredScroll}
+            contentContainerStyle={styles.featuredContent}
+          >
+            <TouchableOpacity onPress={() => handleLearnMore('turbulence')}>
+              <View style={styles.featuredCard}>
+                <Image 
+                  source={{ uri: 'https://images.pexels.com/photos/2007401/pexels-photo-2007401.jpeg' }}
+                  style={styles.featuredImage}
+                />
+                <LinearGradient
+                  colors={['transparent', 'rgba(0,0,0,0.8)']}
+                  style={styles.featuredOverlay}
+                />
+                <View style={styles.featuredContent}>
+                  <View style={styles.featuredBadge}>
+                    <Text style={styles.featuredBadgeText}>Popular</Text>
+                  </View>
+                  <Text style={styles.featuredTitle}>What is turbulence, really?</Text>
+                  <Text style={styles.featuredDescription}>Learn why turbulence is completely normal and safe</Text>
+                </View>
+              </View>
+            </TouchableOpacity>
+            
+            <TouchableOpacity onPress={() => handleLearnMore('takeoff-landing')}>
+              <View style={styles.featuredCard}>
+                <Image 
+                  source={{ uri: 'https://images.pexels.com/photos/46148/aircraft-jet-landing-cloud-46148.jpeg' }}
+                  style={styles.featuredImage}
+                />
+                <LinearGradient
+                  colors={['transparent', 'rgba(0,0,0,0.8)']}
+                  style={styles.featuredOverlay}
+                />
+                <View style={styles.featuredContent}>
+                  <View style={[styles.featuredBadge, { backgroundColor: colors.secondary }]}>
+                    <Text style={styles.featuredBadgeText}>Essential</Text>
+                  </View>
+                  <Text style={styles.featuredTitle}>Why does takeoff feel so intense?</Text>
+                  <Text style={styles.featuredDescription}>Understanding the takeoff process and sensations</Text>
+                </View>
+              </View>
             </TouchableOpacity>
 
-            <TouchableOpacity
-              onPress={() => handleLearnMore("takeoff-landing")}
-              accessible={true}
-              accessibilityLabel="Takeoff & Landing Guide"
-            >
-              <LinearGradient
-                colors={Colors.light.gradient.secondary as [ColorValue, ColorValue, ...ColorValue[]]}
-                style={styles.recommendationCard}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-              >
-                <Image
-                  source={{
-                    uri: "https://images.pexels.com/photos/46148/aircraft-jet-landing-cloud-46148.jpeg",
-                  }}
-                  style={styles.recommendationImage}
+            <TouchableOpacity onPress={() => handleLearnMore('sounds')}>
+              <View style={styles.featuredCard}>
+                <Image 
+                  source={{ uri: 'https://images.pexels.com/photos/912050/pexels-photo-912050.jpeg' }}
+                  style={styles.featuredImage}
                 />
-                <View style={styles.recommendationContentContainer}>
-                  <Text style={styles.recommendationTitle}>
-                    Takeoff & Landing Guide
-                  </Text>
-                  <Text style={styles.recommendationDescription}>
-                    Expert tips for staying calm during takeoff and landing
-                  </Text>
+                <LinearGradient
+                  colors={['transparent', 'rgba(0,0,0,0.8)']}
+                  style={styles.featuredOverlay}
+                />
+                <View style={styles.featuredContent}>
+                  <View style={[styles.featuredBadge, { backgroundColor: colors.accent }]}>
+                    <Text style={styles.featuredBadgeText}>New</Text>
+                  </View>
+                  <Text style={styles.featuredTitle}>Why are airplanes so noisy?</Text>
+                  <Text style={styles.featuredDescription}>Decode every sound you hear during flight</Text>
                 </View>
-              </LinearGradient>
+              </View>
             </TouchableOpacity>
 
-            <TouchableOpacity 
-              onPress={() => handleLearnMore("sounds")}
-              accessible={true}
-              accessibilityLabel="Aircraft Sounds Explained"
-            >
-              <LinearGradient
-                colors={Colors.light.gradient.accent as [ColorValue, ColorValue, ...ColorValue[]]}
-                style={styles.recommendationCard}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-              >
-                <Image
-                  source={{
-                    uri: "https://images.pexels.com/photos/912050/pexels-photo-912050.jpeg",
-                  }}
-                  style={styles.recommendationImage}
+            <TouchableOpacity onPress={() => handleLearnMore('safety')}>
+              <View style={styles.featuredCard}>
+                <Image 
+                  source={{ uri: 'https://images.pexels.com/photos/2007401/pexels-photo-2007401.jpeg' }}
+                  style={styles.featuredImage}
                 />
-                <View style={styles.recommendationContentContainer}>
-                  <Text style={styles.recommendationTitle}>
-                    Aircraft Sounds Explained
-                  </Text>
-                  <Text style={styles.recommendationDescription}>
-                    Understanding common airplane noises and why they're normal
-                  </Text>
+                <LinearGradient
+                  colors={['transparent', 'rgba(0,0,0,0.8)']}
+                  style={styles.featuredOverlay}
+                />
+                <View style={styles.featuredContent}>
+                  <View style={[styles.featuredBadge, { backgroundColor: '#10b981' }]}>
+                    <Text style={styles.featuredBadgeText}>Safety</Text>
+                  </View>
+                  <Text style={styles.featuredTitle}>Are airplanes really the safest?</Text>
+                  <Text style={styles.featuredDescription}>The facts about aviation safety statistics</Text>
                 </View>
-              </LinearGradient>
+              </View>
             </TouchableOpacity>
           </ScrollView>
         </Animated.View>
 
-        {/* Tip of the Day */}
-        <Animated.View entering={FadeInRight.delay(600).springify()}>
+        {/* Daily Insight */}
+        <Animated.View 
+          entering={FadeInUp.delay(800).springify()}
+          style={styles.dailyInsightContainer}
+        >
           <LinearGradient
-            colors={Colors.light.gradient.accent as [ColorValue, ColorValue, ...ColorValue[]]}
-            style={styles.tipContainer}
+            colors={[colors.primary, colors.primaryLight]}
+            style={styles.dailyInsight}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
           >
-            <Text style={styles.tipTitle}>Tip of the Day</Text>
-            <Text style={styles.tipHeading}>{dailyTip?.title}</Text>
-            <Text style={styles.tipText}>{dailyTip?.content}</Text>
+            <View style={styles.dailyInsightHeader}>
+              <View style={styles.dailyInsightIcon}>
+                <Sparkles size={24} color="#ffffff" strokeWidth={2.5} />
+              </View>
+              <View>
+                <Text style={styles.dailyInsightLabel}>Daily Insight</Text>
+                <Text style={styles.dailyInsightDate}>
+                  {new Date().toLocaleDateString('en-US', { 
+                    weekday: 'long', 
+                    month: 'short', 
+                    day: 'numeric' 
+                  })}
+                </Text>
+              </View>
+            </View>
+            <Text style={styles.dailyInsightTitle}>{dailyTip?.title}</Text>
+            <Text style={styles.dailyInsightText}>{dailyTip?.content}</Text>
           </LinearGradient>
         </Animated.View>
+
+        {/* Bottom Spacing for Tab Bar */}
+        <View style={styles.bottomSpacing} />
       </ScrollView>
     </View>
   );
-}const styles = StyleSheet.create({
+}
+
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.light.background,
+    backgroundColor: colors.background,
   },
   content: {
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: 20,
     paddingTop: 60,
-    paddingBottom: 32,
-  },
-  settingsButton: {
-    position: "absolute",
-    zIndex: 10,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: "center",
-    alignItems: "center",
+    paddingHorizontal: 20,
   },
   headerContainer: {
-    alignItems: "flex-start",
     marginBottom: 32,
-    width: "100%",
   },
-  welcomeHeader: {
-    width: "100%",
+  headerContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 20,
+  },
+  greetingSection: {
+    flex: 1,
   },
   greeting: {
-    fontFamily: "Inter-Regular",
+    fontFamily: 'Inter-Regular',
     fontSize: 16,
-    color: Colors.light.textSecondary,
+    color: colors.textSecondary,
     marginBottom: 4,
   },
   userName: {
-    fontFamily: "Inter-SemiBold",
-    fontSize: 32,
-    color: Colors.light.text,
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 28,
+    color: colors.text,
     marginBottom: 8,
+    lineHeight: 34,
   },
   welcomeMessage: {
-    fontFamily: "Inter-Medium",
-    fontSize: 18,
-    color: Colors.light.primary,
+    fontFamily: 'Inter-Medium',
+    fontSize: 16,
+    color: colors.primary,
   },
-  quickActions: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 16,
+  settingsButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.backgroundSecondary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 16,
+  },
+  aviationFactContainer: {
+    marginTop: 8,
+  },
+  aviationFactCard: {
+    backgroundColor: colors.backgroundSecondary,
+    borderRadius: 16,
+    padding: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.primary,
+  },
+  aviationFactHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 8,
+  },
+  aviationFactIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.card,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  factCategoryBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    flex: 1,
+  },
+  factCategoryText: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 9,
+    color: '#ffffff',
+    letterSpacing: 0.5,
+  },
+  factRefreshButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.card,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  aviationFactTitle: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 15,
+    color: colors.text,
+    marginBottom: 6,
+    lineHeight: 20,
+  },
+  aviationFactDescription: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 13,
+    color: colors.textSecondary,
+    lineHeight: 18,
+  },
+  quickActionsContainer: {
     marginBottom: 32,
   },
+  sectionTitle: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 22,
+    color: colors.text,
+    marginBottom: 16,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  seeAllText: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 14,
+    color: colors.primary,
+  },
+  quickActions: {
+    gap: 12,
+  },
   quickActionWrapper: {
-    width: "47%",
+    marginBottom: 4,
   },
   quickActionCard: {
-    borderRadius: 24,
+    borderRadius: 20,
     padding: 20,
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 150,
-    width: "100%",
+    flexDirection: 'row',
+    alignItems: 'center',
     ...Platform.select({
       ios: {
-        shadowColor: Colors.light.primary,
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.3,
+        shadowColor: 'rgba(0, 0, 0, 0.1)',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 1,
         shadowRadius: 12,
       },
       android: {
-        elevation: 8,
+        elevation: 6,
       },
       web: {
-        shadowColor: Colors.light.primary,
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.3,
+        shadowColor: 'rgba(0, 0, 0, 0.1)',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 1,
         shadowRadius: 12,
       },
     }),
   },
-  quickActionIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: "rgba(255, 255, 255, 0.2)",
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.3)",
+  quickActionIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  quickActionTextContainer: {
+    flex: 1,
   },
   quickActionText: {
-    fontFamily: "Inter-Medium",
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 16,
+    color: '#ffffff',
+    marginBottom: 4,
+  },
+  quickActionSubtitle: {
+    fontFamily: 'Inter-Regular',
     fontSize: 14,
-    color: "#ffffff",
-    textAlign: "center",
-    marginTop: 4,
-    width: "100%",
+    color: 'rgba(255, 255, 255, 0.8)',
   },
   section: {
     marginBottom: 32,
   },
-  sectionTitle: {
-    fontFamily: "Inter-SemiBold",
-    fontSize: 22,
-    color: Colors.light.text,
-    marginBottom: 20,
-  },
-  recommendationsScroll: {
+  featuredScroll: {
     marginHorizontal: -20,
   },
-  recommendationsContent: {
+  featuredContent: {
     paddingHorizontal: 20,
-    paddingBottom: 8,
     gap: 16,
   },
-  recommendationCard: {
-    borderRadius: 24,
-    width: 300,
-    overflow: "hidden",
+  featuredCard: {
+    width: 280,
+    height: 200,
+    borderRadius: 20,
+    overflow: 'hidden',
+    position: 'relative',
     ...Platform.select({
       ios: {
-        shadowColor: Colors.light.primary,
+        shadowColor: colors.text,
         shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.3,
-        shadowRadius: 12,
+        shadowOpacity: 1,
+        shadowRadius: 16,
       },
       android: {
         elevation: 8,
       },
       web: {
-        shadowColor: Colors.light.primary,
+        shadowColor: colors.text,
         shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.3,
-        shadowRadius: 12,
+        shadowOpacity: 1,
+        shadowRadius: 16,
       },
     }),
   },
-  recommendationImage: {
-    width: "100%",
-    height: 180,
+  featuredImage: {
+    width: '100%',
+    height: '100%',
+    position: 'absolute',
   },
-  recommendationContentContainer: {
-    padding: 20,
+  featuredOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: '60%',
   },
-  recommendationTitle: {
-    fontFamily: "Inter-SemiBold",
-    fontSize: 20,
-    color: "#ffffff",
+  featuredBadge: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
     marginBottom: 8,
   },
-  recommendationDescription: {
-    fontFamily: "Inter-Regular",
-    fontSize: 15,
-    color: "rgba(255, 255, 255, 0.9)",
-    lineHeight: 22,
+  featuredBadgeText: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 12,
+    color: '#ffffff',
   },
-  tipContainer: {
+  featuredTitle: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 18,
+    color: '#ffffff',
+    marginBottom: 4,
+  },
+  featuredDescription: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.9)',
+  },
+  dailyInsightContainer: {
+    marginBottom: 32,
+  },
+  dailyInsight: {
     borderRadius: 24,
     padding: 24,
     ...Platform.select({
       ios: {
-        shadowColor: Colors.light.primary,
+        shadowColor: colors.primary,
         shadowOffset: { width: 0, height: 8 },
         shadowOpacity: 0.3,
-        shadowRadius: 12,
+        shadowRadius: 16,
       },
       android: {
         elevation: 8,
       },
       web: {
-        shadowColor: Colors.light.primary,
+        shadowColor: colors.primary,
         shadowOffset: { width: 0, height: 8 },
         shadowOpacity: 0.3,
-        shadowRadius: 12,
+        shadowRadius: 16,
       },
     }),
   },
-  tipTitle: {
-    fontFamily: "Inter-SemiBold",
-    fontSize: 22,
-    color: "#ffffff",
+  dailyInsightHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 16,
   },
-  tipHeading: {
-    fontFamily: "Inter-SemiBold",
-    fontSize: 18,
-    color: "#ffffff",
+  dailyInsightIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  dailyInsightLabel: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 16,
+    color: '#ffffff',
+  },
+  dailyInsightDate: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.8)',
+  },
+  dailyInsightTitle: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 20,
+    color: '#ffffff',
     marginBottom: 8,
   },
-  tipText: {
-    fontFamily: "Inter-Regular",
+  dailyInsightText: {
+    fontFamily: 'Inter-Regular',
     fontSize: 16,
-    color: "rgba(255, 255, 255, 0.9)",
-    lineHeight: 26,
+    color: 'rgba(255, 255, 255, 0.9)',
+    lineHeight: 24,
+  },
+  bottomSpacing: {
+    height: 100,
   },
 });

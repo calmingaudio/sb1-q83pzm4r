@@ -15,18 +15,24 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
-import { Mail, Lock } from "lucide-react-native";
-import Colors from "@/constants/Colors";
+import { ArrowLeft, Mail, Apple, Sparkles } from 'lucide-react-native';
+import { useTheme } from "@/components/ThemeProvider";
 import { router } from "expo-router";
 import { useAuth } from "../../context/authContext";
+import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
+import Colors from '@/constants/Colors';
+import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
+import { faApple, faGoogle } from '@fortawesome/free-brands-svg-icons';
+
 
 export default function LoginScreen() {
+  const { colors } = useTheme();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
   const passwordInputRef = useRef<TextInput>(null);
-  const { signInWithEmail } = useAuth();
+  const { signInWithEmail, signInWithApple, signInWithGoogle } = useAuth();
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -35,12 +41,40 @@ export default function LoginScreen() {
     }
     setIsLoading(true);
     try {
-      await signInWithEmail(email, password);
+      const result = await signInWithEmail(email, password);
+      if (!result.success) {
+        Alert.alert("Login Error", result.error);
+      }
       // On success, the root layout guard will handle navigation
     } catch (error: any) {
       Alert.alert("Login Error", error.message);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleAppleSignIn = async () => {
+    try {
+      const result = await signInWithApple();
+      if (!result.success) {
+        Alert.alert('Sign-In Error', result.error || 'Could not sign in with Apple. Please try again.');
+      }
+    } catch (error: any) {
+      Alert.alert('Sign-In Error', 'Could not sign in with Apple. Please try again.');
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    try {
+      // For now, we'll use a placeholder ID token
+      // In a real implementation, you'd get this from Google Sign-In SDK
+      const idToken = "placeholder_google_id_token";
+      const result = await signInWithGoogle(idToken);
+      if (!result.success) {
+        Alert.alert('Google Sign-In Error', result.error || 'Could not sign in with Google. Please try again.');
+      }
+    } catch (error: any) {
+      Alert.alert('Google Sign-In Error', 'Could not sign in with Google. Please try again.');
     }
   };
 
@@ -120,6 +154,28 @@ export default function LoginScreen() {
               {isLoading ? "Signing In..." : "Sign In"}
             </Text>
           </TouchableOpacity>
+
+          {/* Divider */}
+          <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>or continue with</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          {/* Social Sign In */}
+          <View style={styles.socialButtons}>
+            <TouchableOpacity style={styles.socialButton} onPress={handleGoogleSignIn}>
+              <FontAwesomeIcon icon={faGoogle} size={20} color={Colors.light.text} />
+              <Text style={styles.socialButtonLabel}>Google</Text>
+            </TouchableOpacity>
+
+            {Platform.OS === 'ios' && (
+              <TouchableOpacity style={styles.socialButton} onPress={handleAppleSignIn}>
+                <FontAwesomeIcon icon={faApple} size={20} color={Colors.light.text} />
+                <Text style={styles.socialButtonLabel}>Apple</Text>
+              </TouchableOpacity>
+            )}
+          </View>
 
           <TouchableOpacity
             style={styles.switchScreenButton}
@@ -233,5 +289,44 @@ const styles = StyleSheet.create({
   link: {
     color: Colors.light.primary,
     fontFamily: "Inter-SemiBold",
+  },
+  divider: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: 24,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: Colors.light.border,
+  },
+  dividerText: {
+    fontFamily: "Inter-Regular",
+    fontSize: 14,
+    color: Colors.light.textSecondary,
+    marginHorizontal: 16,
+  },
+  socialButtons: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 24,
+  },
+  socialButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.light.card,
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderWidth: 1,
+    borderColor: Colors.light.border,
+    gap: 8,
+  },
+  socialButtonLabel: {
+    fontFamily: "Inter-Medium",
+    fontSize: 16,
+    color: Colors.light.text,
   },
 });

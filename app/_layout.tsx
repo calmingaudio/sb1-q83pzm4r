@@ -12,6 +12,7 @@ import {
 import { GamificationProvider } from '@/components/gamification/GamificationProvider';
 import { OfflineProvider } from '@/components/OfflineProvider';
 import { AnalyticsProvider } from '@/components/AnalyticsProvider';
+import { ThemeProvider } from '@/components/ThemeProvider';
 import ConsentBanner from '@/components/ConsentBanner';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { KeyboardAvoidingView, Platform } from 'react-native';
@@ -96,17 +97,19 @@ export default function RootLayout() {
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={{ flex: 1 }}
         >
-          <AuthProvider>
-            <AnalyticsProvider>
-              <OfflineProvider>
-                <GamificationProvider>
-                  <AppNavigation />
-                  <StatusBar style="auto" />
-                  <ConsentBanner />
-                </GamificationProvider>
-              </OfflineProvider>
-            </AnalyticsProvider>
-          </AuthProvider>
+          <ThemeProvider>
+            <AuthProvider>
+              <AnalyticsProvider>
+                <OfflineProvider>
+                  <GamificationProvider>
+                    <AppNavigation />
+                    <StatusBar style="auto" />
+                    <ConsentBanner />
+                  </GamificationProvider>
+                </OfflineProvider>
+              </AnalyticsProvider>
+            </AuthProvider>
+          </ThemeProvider>
         </KeyboardAvoidingView>
       </SafeAreaProvider>
     </GestureHandlerRootView>

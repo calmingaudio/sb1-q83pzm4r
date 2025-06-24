@@ -27,9 +27,10 @@ import { useAuth } from "@/context/authContext";
 import { router } from "expo-router";
 
 export default function ProfileScreen() {
-  const { signOut, deleteAccount, isMutating } = useAuth();
+  const { logout, deleteAccount } = useAuth();
   const [offlineAccessEnabled, setOfflineAccessEnabled] = useState(true);
   const [hapticFeedbackEnabled, setHapticFeedbackEnabled] = useState(true);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const openURL = async (url: string) => {
     const supported = await Linking.canOpenURL(url);
@@ -53,10 +54,16 @@ export default function ProfileScreen() {
           text: "Delete",
           style: "destructive",
           onPress: async () => {
+            setIsDeleting(true);
             try {
-              await deleteAccount();
+              const result = await deleteAccount();
+              if (!result.success) {
+                console.log("Deletion failed:", result.error);
+              }
             } catch (error) {
               console.log("Deletion failed, user was notified.");
+            } finally {
+              setIsDeleting(false);
             }
           },
         },
@@ -181,14 +188,14 @@ export default function ProfileScreen() {
           <TouchableOpacity
             style={[styles.linkItem, styles.deleteButton]}
             onPress={handleDeletePress}
-            disabled={isMutating}
+            disabled={isDeleting}
           >
             <View style={styles.settingInfo}>
               <View style={styles.iconContainer}>
                 <Trash2 size={22} color="#ef4444" />
               </View>
               <Text style={[styles.settingTitle, styles.deleteButtonText]}>
-                Delete Account
+                {isDeleting ? "Deleting Account..." : "Delete Account"}
               </Text>
             </View>
             <ArrowRight size={18} color="#ef4444" />
@@ -197,7 +204,7 @@ export default function ProfileScreen() {
 
         {/* Sign Out Section */}
         <View style={styles.signOutSection}>
-          <TouchableOpacity style={styles.signOutButton} onPress={signOut}>
+          <TouchableOpacity style={styles.signOutButton} onPress={logout}>
             <LogOut size={18} color="#ef4444" />
             <Text style={styles.signOutButtonText}>Sign Out</Text>
           </TouchableOpacity>

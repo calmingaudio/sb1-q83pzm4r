@@ -20,6 +20,8 @@ import { Mail, Apple, CheckSquare, Square } from 'lucide-react-native';
 import Colors from '@/constants/Colors';
 import { router } from 'expo-router';
 import { useAuth } from '../../context/authContext';
+import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
+import { faApple, faGoogle } from '@fortawesome/free-brands-svg-icons';
 
 const openURL = async (url: string) => {
   const supported = await Linking.canOpenURL(url);
@@ -43,10 +45,10 @@ export default function SignupScreen() {
   const passwordInputRef = useRef<TextInput>(null);
 
   const {
-    signInWithApple,
     signUpWithEmail,
+    signInWithApple,
+    signInWithGoogle,
     isLoading: isAuthLoading,
-    error: authError,
   } = useAuth();
 
   const handleEmailSignup = async () => {
@@ -65,9 +67,14 @@ export default function SignupScreen() {
 
     setIsEmailLoading(true);
     try {
-      // Call the new context function
-      await signUpWithEmail(firstName, lastName, email, password, marketingOptIn);
-      // Navigation will be handled by the root layout guard
+      // Call the new context function with displayName
+      const displayName = `${firstName} ${lastName}`;
+      const result = await signUpWithEmail(email, password, displayName);
+      if (!result.success) {
+        Alert.alert("Sign-Up Error", result.error);
+      } else {
+        // Navigation will be handled by the root layout guard
+      }
     } catch (error: any) {
       // Firebase provides user-friendly error messages
       Alert.alert("Sign-Up Error", error.message);
@@ -77,9 +84,27 @@ export default function SignupScreen() {
   };
 
   const handleAppleSignupAttempt = async () => {
-    await signInWithApple();
-    if (authError) {
-        Alert.alert('Sign-In Error', authError.message || 'Could not sign in with Apple. Please try again.');
+    try {
+      const result = await signInWithApple();
+      if (!result.success) {
+        Alert.alert('Sign-In Error', result.error || 'Could not sign in with Apple. Please try again.');
+      }
+    } catch (error: any) {
+      Alert.alert('Sign-In Error', 'Could not sign in with Apple. Please try again.');
+    }
+  };
+
+  const handleGoogleSignupAttempt = async () => {
+    try {
+      // For now, we'll use a placeholder ID token
+      // In a real implementation, you'd get this from Google Sign-In SDK
+      const idToken = "placeholder_google_id_token";
+      const result = await signInWithGoogle(idToken);
+      if (!result.success) {
+        Alert.alert('Google Sign-In Error', result.error || 'Could not sign in with Google. Please try again.');
+      }
+    } catch (error: any) {
+      Alert.alert('Google Sign-In Error', 'Could not sign in with Google. Please try again.');
     }
   };
 
@@ -208,18 +233,28 @@ export default function SignupScreen() {
             <View style={styles.dividerLine} />
           </View>
 
-          {Platform.OS === "ios" && (
+          {/* Social Sign In Buttons */}
+          <View style={styles.socialButtons}>
             <TouchableOpacity
-              style={[styles.button, styles.appleButton]}
-              onPress={handleAppleSignupAttempt}
+              style={[styles.socialButton, styles.googleButton]}
+              onPress={handleGoogleSignupAttempt}
               disabled={isAuthLoading || isEmailLoading}
             >
-              <Apple size={20} color={Colors.light.text} />
-              <Text style={styles.appleButtonText}>
-                {isAuthLoading ? "Signing in..." : "Continue with Apple"}
-              </Text>
+              <FontAwesomeIcon icon={faGoogle} size={20} color={Colors.light.text} />
+              <Text style={styles.socialButtonLabel}>Google</Text>
             </TouchableOpacity>
-          )}
+
+            {Platform.OS === "ios" && (
+              <TouchableOpacity
+                style={[styles.socialButton, styles.appleButton]}
+                onPress={handleAppleSignupAttempt}
+                disabled={isAuthLoading || isEmailLoading}
+              >
+                <FontAwesomeIcon icon={faApple} size={20} color="#ffffff" />
+                <Text style={[styles.socialButtonLabel, { color: "#ffffff" }]}>Apple</Text>
+              </TouchableOpacity>
+            )}
+          </View>
 
           <TouchableOpacity
             style={styles.switchScreenButton}
@@ -356,9 +391,7 @@ const styles = StyleSheet.create({
     color: Colors.light.textSecondary,
   },
   appleButton: {
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: Colors.light.border,
+    backgroundColor: "#000000",
   },
   buttonText: {
     fontFamily: "Inter-SemiBold",
@@ -368,7 +401,7 @@ const styles = StyleSheet.create({
   appleButtonText: {
     fontFamily: "Inter-SemiBold",
     fontSize: 16,
-    color: Colors.light.text,
+    color: "#ffffff",
   },
   divider: {
     flexDirection: "row",
@@ -405,5 +438,30 @@ const styles = StyleSheet.create({
   link: {
     color: Colors.light.primary,
     fontFamily: "Inter-SemiBold",
+  },
+  socialButtons: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 24,
+  },
+  socialButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    gap: 8,
+  },
+  googleButton: {
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: Colors.light.border,
+  },
+  socialButtonLabel: {
+    fontFamily: "Inter-Medium",
+    fontSize: 16,
+    color: Colors.light.text,
   },
 });
