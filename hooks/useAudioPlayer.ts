@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Audio } from 'expo-av';
+import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
 import { Platform } from 'react-native';
 
 export interface AudioPlayerState {
@@ -29,22 +29,19 @@ export function useAudioPlayer() {
     // Configure audio session for background playback and seamless looping
     const configureAudio = async () => {
       try {
-        const audioConfig = {
+        await Audio.setAudioModeAsync({
           allowsRecordingIOS: false,
           staysActiveInBackground: true,
           playsInSilentModeIOS: true,
           shouldDuckAndroid: true,
           playThroughEarpieceAndroid: false,
-          // Only set platform-specific interruption modes on native platforms
-          ...(Platform.OS !== 'web' ? {
-            interruptionModeIOS: Audio.INTERRUPTION_MODE_IOS_DO_NOT_MIX,
-            interruptionModeAndroid: Audio.INTERRUPTION_MODE_ANDROID_DO_NOT_MIX,
-          } : {}),
-        };
-
-        await Audio.setAudioModeAsync(audioConfig);
+          interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+          interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
+        });
+        console.log('Audio mode configured successfully');
       } catch (error) {
         console.error('Error configuring audio:', error);
+        setState(prev => ({ ...prev, error: 'Failed to configure audio' }));
       }
     };
 
@@ -70,15 +67,18 @@ export function useAudioPlayer() {
     try {
       if (!isMounted.current) return;
       setState(prev => ({ ...prev, isLoading: true, error: null }));
+      console.log('Starting to play sound:', soundId);
 
       // Stop current sound if playing different sound
       if (soundRef.current && currentSoundId.current !== soundId) {
+        console.log('Unloading previous sound');
         await soundRef.current.unloadAsync();
         soundRef.current = null;
       }
 
       // If same sound is playing, just toggle
       if (currentSoundId.current === soundId && soundRef.current) {
+        console.log('Toggling existing sound');
         const status = await soundRef.current.getStatusAsync();
         if (status.isLoaded) {
           if (status.isPlaying) {
@@ -94,44 +94,39 @@ export function useAudioPlayer() {
         }
       }
 
-      // Load and play new sound with optimized looping settings
-      const { sound } = await Audio.Sound.createAsync(audioFile, {
-        shouldPlay: true,
-        isLooping: true, // Enable seamless looping
-        volume: state.volume,
-        progressUpdateIntervalMillis: 500, // More frequent updates for smoother progress
-        // Optimize for seamless looping
-        rate: 1.0,
-        shouldCorrectPitch: true,
-        pitchCorrectionQuality: Audio.PitchCorrectionQuality.High,
-      });
-
-      soundRef.current = sound;
-      currentSoundId.current = soundId;
-
-      // Set up playback status update with loop optimization
-      sound.setOnPlaybackStatusUpdate((status) => {
-        if (!isMounted.current) return;
-        if (status.isLoaded) {
-          setState(prev => ({
-            ...prev,
-            isPlaying: status.isPlaying,
-            isLoading: false,
-            position: status.positionMillis || 0,
-            duration: status.durationMillis || 0,
-          }));
-
-          // Handle seamless looping - restart when near the end to avoid gaps
-          if (status.durationMillis && status.positionMillis) {
-            const timeRemaining = status.durationMillis - status.positionMillis;
-            // If less than 100ms remaining, prepare for seamless loop
-            if (timeRemaining < 100 && status.isPlaying) {
-              // The isLooping: true setting handles this automatically
-              // but we can add additional logic here if needed
-            }
+      console.log('Loading new sound:', audioFile);
+      
+      // Load and play new sound
+      const { sound, status } = await Audio.Sound.createAsync(
+        typeof audioFile === 'string' ? { uri: audioFile } : audioFile,
+        {
+          shouldPlay: true,
+          isLooping: true,
+          volume: state.volume,
+          progressUpdateIntervalMillis: 500,
+          positionMillis: 0,
+          rate: 1.0,
+          shouldCorrectPitch: true,
+          pitchCorrectionQuality: Audio.PitchCorrectionQuality.High,
+        },
+        (status) => {
+          if (!isMounted.current) return;
+          if (status.isLoaded) {
+            setState(prev => ({
+              ...prev,
+              isPlaying: status.isPlaying,
+              position: status.positionMillis || 0,
+              duration: status.durationMillis || 0,
+            }));
+          } else {
+            console.log('Sound status not loaded:', status);
           }
         }
-      });
+      );
+
+      console.log('Sound created successfully');
+      soundRef.current = sound;
+      currentSoundId.current = soundId;
 
       if (!isMounted.current) return;
       setState(prev => ({ ...prev, isPlaying: true, isLoading: false }));
@@ -142,7 +137,7 @@ export function useAudioPlayer() {
         ...prev,
         isPlaying: false,
         isLoading: false,
-        error: 'Failed to play audio',
+        error: 'Failed to play audio: ' + (error instanceof Error ? error.message : String(error)),
       }));
     }
   };

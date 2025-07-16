@@ -20,30 +20,36 @@ export function useAuthentication() {
   useEffect(() => {
     const firebaseAuth = getFirebaseAuth();
     const unsubscribeAuth = onAuthStateChanged(firebaseAuth, (authUser) => {
-      if (authUser) {
-        setUser(authUser);
-        // User is logged in, now listen for their profile data.
-        const userDocRef = doc(db, "users", authUser.uid);
-        const unsubscribeProfile = onSnapshot(userDocRef, (doc) => {
-          if (doc.exists()) {
-            setProfile(doc.data() as UserProfile);
-          } else {
-            // Profile doesn't exist in Firestore yet.
-            setProfile(null);
-          }
-          setIsLoading(false); // Loading is finished only after we get a profile response.
-        });
-        return () => unsubscribeProfile(); // Cleanup profile listener
-      } else {
-        // User is logged out.
-        setUser(null);
-        setProfile(null);
-        setIsLoading(false); // Loading is finished.
-      }
+      setUser(authUser);
+      setIsLoading(false); // Set loading to false immediately after auth state is known
     });
 
-    return () => unsubscribeAuth(); // Cleanup auth listener
+    return () => unsubscribeAuth();
   }, []);
+
+  // Separate effect for profile data, only runs when there's a user
+  useEffect(() => {
+    let unsubscribeProfile: (() => void) | undefined;
+
+    if (user) {
+      const userDocRef = doc(db, "users", user.uid);
+      unsubscribeProfile = onSnapshot(userDocRef, (doc) => {
+        if (doc.exists()) {
+          setProfile(doc.data() as UserProfile);
+        } else {
+          setProfile(null);
+        }
+      });
+    } else {
+      setProfile(null);
+    }
+
+    return () => {
+      if (unsubscribeProfile) {
+        unsubscribeProfile();
+      }
+    };
+  }, [user]);
 
   const updateProfile = async (updates: Partial<UserProfile>) => {
     if (!user) {

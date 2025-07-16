@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, ScrollView, Modal } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { X, Crown, Check, Sparkles } from 'lucide-react-native';
 import { useTheme } from '@/components/ThemeProvider';
@@ -8,7 +8,7 @@ import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 interface Props {
   visible: boolean;
   onClose: () => void;
-  onPurchase: () => void;
+  onPurchase: (planId: 'monthly' | 'annual') => void;
   onRestore: () => void;
   isLoading?: boolean;
 }
@@ -50,264 +50,198 @@ export default function PremiumModal({ visible, onClose, onPurchase, onRestore, 
   const { colors } = useTheme();
   const [selectedPlan, setSelectedPlan] = React.useState<'monthly' | 'annual'>('annual');
 
-  if (!visible) return null;
-
   const styles = createStyles(colors);
 
   return (
-    <View style={styles.overlay}>
-      <Animated.View 
-        style={styles.modal}
-        entering={FadeIn.delay(100)}
-      >
-        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-          {/* Header */}
-          <View style={styles.header}>
-            <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-              <X size={24} color={colors.textSecondary} strokeWidth={2} />
-            </TouchableOpacity>
-          </View>
+    <Modal
+      visible={visible}
+      transparent={true}
+      animationType="fade"
+      statusBarTranslucent={true}
+      onRequestClose={onClose}
+    >
+      <View style={styles.overlay}>
+        <View style={styles.modal}>
+          <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+            {/* Header */}
+            <View style={styles.header}>
+              <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+                <X size={24} color={colors.textSecondary} strokeWidth={2} />
+              </TouchableOpacity>
+            </View>
 
-          {/* Premium Badge */}
-          <Animated.View 
-            style={styles.premiumBadge}
-            entering={FadeInDown.delay(200).springify()}
-          >
-            <LinearGradient
-              colors={['#FFD700', '#FFA500', '#FF6B35']}
-              style={styles.premiumBadgeGradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-            >
-              <Crown size={32} color="#ffffff" strokeWidth={2.5} />
-              <Text style={styles.premiumBadgeText}>SkyCalm Premium</Text>
-            </LinearGradient>
-          </Animated.View>
-
-          {/* Title */}
-          <Animated.View 
-            style={styles.titleContainer}
-            entering={FadeInDown.delay(300).springify()}
-          >
-            <Text style={styles.title}>Unlock Advanced Breathing Techniques and Tailored Meditations</Text>
-            <Text style={styles.subtitle}>
-              Access professional-grade breathing methods and guided meditations designed specifically for flying anxiety relief.
-            </Text>
-          </Animated.View>
-
-          {/* Pricing Plans */}
-          <Animated.View 
-            style={styles.pricingPlansContainer}
-            entering={FadeInDown.delay(400).springify()}
-          >
-            <Text style={styles.pricingTitle}>Choose Your Plan</Text>
-            
-            {/* Annual Plan */}
-            <TouchableOpacity
-              style={[
-                styles.pricingPlan,
-                selectedPlan === 'annual' && styles.selectedPlan
-              ]}
-              onPress={() => setSelectedPlan('annual')}
-            >
+            {/* Premium Badge */}
+            <View style={styles.premiumBadge}>
               <LinearGradient
-                colors={selectedPlan === 'annual' ? ['#6366f1', '#8b5cf6'] : [colors.card, colors.card]}
-                style={styles.pricingPlanGradient}
+                colors={['#FFD700', '#FFA500', '#FF6B35']}
+                style={styles.premiumBadgeGradient}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
               >
-                <View style={styles.pricingPlanHeader}>
-                  <View style={styles.pricingPlanLeft}>
-                    <Text style={[
-                      styles.pricingPlanTitle,
-                      selectedPlan === 'annual' && styles.selectedPlanText
-                    ]}>
-                      Annual Plan
-                    </Text>
-                    <View style={styles.savingsBadge}>
-                      <Text style={styles.savingsText}>Save 72%</Text>
+                <Crown size={32} color="#ffffff" strokeWidth={2.5} />
+                <Text style={styles.premiumBadgeText}>SkyCalm Premium</Text>
+              </LinearGradient>
+            </View>
+
+            {/* Title */}
+            <View style={styles.titleContainer}>
+              <Text style={styles.title}>Unlock Advanced Breathing Techniques</Text>
+              <Text style={styles.subtitle}>
+                Access professional-grade breathing methods designed specifically for flying anxiety relief.
+              </Text>
+            </View>
+
+            {/* Pricing Plans */}
+            <View style={styles.pricingPlansContainer}>
+              <Text style={styles.pricingTitle}>Choose Your Plan</Text>
+              
+              {/* Annual Plan */}
+              <TouchableOpacity
+                style={[
+                  styles.pricingPlan,
+                  selectedPlan === 'annual' && styles.selectedPlan
+                ]}
+                onPress={() => setSelectedPlan('annual')}
+              >
+                <LinearGradient
+                  colors={selectedPlan === 'annual' ? ['#6366f1', '#8b5cf6'] : [colors.card, colors.card]}
+                  style={styles.pricingPlanGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                >
+                  <View style={styles.pricingPlanHeader}>
+                    <View style={styles.pricingPlanLeft}>
+                      <Text style={[
+                        styles.pricingPlanTitle,
+                        selectedPlan === 'annual' && styles.selectedPlanText
+                      ]}>
+                        Annual Plan
+                      </Text>
+                      <View style={styles.savingsBadge}>
+                        <Text style={styles.savingsText}>Save 72%</Text>
+                      </View>
+                    </View>
+                    <View style={styles.pricingPlanRight}>
+                      <Text style={[
+                        styles.pricingPlanPrice,
+                        selectedPlan === 'annual' && styles.selectedPlanText
+                      ]}>
+                        $19.99
+                      </Text>
+                      <Text style={[
+                        styles.pricingPlanPeriod,
+                        selectedPlan === 'annual' && styles.selectedPlanSubtext
+                      ]}>
+                        per year
+                      </Text>
                     </View>
                   </View>
-                  <View style={styles.pricingPlanRight}>
-                    <Text style={[
-                      styles.pricingPlanPrice,
-                      selectedPlan === 'annual' && styles.selectedPlanText
-                    ]}>
-                      $20
-                    </Text>
-                    <Text style={[
-                      styles.pricingPlanPeriod,
-                      selectedPlan === 'annual' && styles.selectedPlanSubtext
-                    ]}>
-                      per year
-                    </Text>
-                  </View>
-                </View>
-                <Text style={[
-                  styles.pricingPlanSubtext,
-                  selectedPlan === 'annual' && styles.selectedPlanSubtext
-                ]}>
-                  Just $1.67 per month • Best Value
-                </Text>
-              </LinearGradient>
-            </TouchableOpacity>
+                  <Text style={[
+                    styles.pricingPlanSubtext,
+                    selectedPlan === 'annual' && styles.selectedPlanSubtext
+                  ]}>
+                    Just $1.67 per month • Best Value
+                  </Text>
+                </LinearGradient>
+              </TouchableOpacity>
 
-            {/* Monthly Plan */}
-            <TouchableOpacity
-              style={[
-                styles.pricingPlan,
-                selectedPlan === 'monthly' && styles.selectedPlan
-              ]}
-              onPress={() => setSelectedPlan('monthly')}
-            >
-              <LinearGradient
-                colors={selectedPlan === 'monthly' ? ['#6366f1', '#8b5cf6'] : [colors.card, colors.card]}
-                style={styles.pricingPlanGradient}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
+              {/* Monthly Plan */}
+              <TouchableOpacity
+                style={[
+                  styles.pricingPlan,
+                  selectedPlan === 'monthly' && styles.selectedPlan
+                ]}
+                onPress={() => setSelectedPlan('monthly')}
               >
-                <View style={styles.pricingPlanHeader}>
-                  <View style={styles.pricingPlanLeft}>
-                    <Text style={[
-                      styles.pricingPlanTitle,
-                      selectedPlan === 'monthly' && styles.selectedPlanText
-                    ]}>
-                      Monthly Plan
-                    </Text>
+                <LinearGradient
+                  colors={selectedPlan === 'monthly' ? ['#6366f1', '#8b5cf6'] : [colors.card, colors.card]}
+                  style={styles.pricingPlanGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                >
+                  <View style={styles.pricingPlanHeader}>
+                    <View style={styles.pricingPlanLeft}>
+                      <Text style={[
+                        styles.pricingPlanTitle,
+                        selectedPlan === 'monthly' && styles.selectedPlanText
+                      ]}>
+                        Monthly Plan
+                      </Text>
+                    </View>
+                    <View style={styles.pricingPlanRight}>
+                      <Text style={[
+                        styles.pricingPlanPrice,
+                        selectedPlan === 'monthly' && styles.selectedPlanText
+                      ]}>
+                        $5.99
+                      </Text>
+                      <Text style={[
+                        styles.pricingPlanPeriod,
+                        selectedPlan === 'monthly' && styles.selectedPlanSubtext
+                      ]}>
+                        per month
+                      </Text>
+                    </View>
                   </View>
-                  <View style={styles.pricingPlanRight}>
-                    <Text style={[
-                      styles.pricingPlanPrice,
-                      selectedPlan === 'monthly' && styles.selectedPlanText
-                    ]}>
-                      $6
-                    </Text>
-                    <Text style={[
-                      styles.pricingPlanPeriod,
-                      selectedPlan === 'monthly' && styles.selectedPlanSubtext
-                    ]}>
-                      per month
-                    </Text>
-                  </View>
-                </View>
-                <Text style={[
-                  styles.pricingPlanSubtext,
-                  selectedPlan === 'monthly' && styles.selectedPlanSubtext
-                ]}>
-                  Cancel anytime
-                </Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          </Animated.View>
-
-          {/* Features List */}
-          <View style={styles.featuresContainer}>
-            {premiumFeatures.map((feature, index) => (
-              <Animated.View 
-                key={index}
-                style={styles.featureItem}
-                entering={FadeInDown.delay(500 + index * 50).springify()}
-              >
-                <View style={styles.featureIcon}>
-                  <Text style={styles.featureEmoji}>{feature.icon}</Text>
-                </View>
-                <View style={styles.featureContent}>
-                  <Text style={styles.featureTitle}>{feature.title}</Text>
-                  <Text style={styles.featureDescription}>{feature.description}</Text>
-                </View>
-                <View style={styles.featureCheck}>
-                  <Check size={16} color={colors.success} strokeWidth={2.5} />
-                </View>
-              </Animated.View>
-            ))}
-          </View>
-
-          {/* Additional Benefits */}
-          <Animated.View 
-            style={styles.additionalBenefits}
-            entering={FadeInDown.delay(800).springify()}
-          >
-            <Text style={styles.additionalBenefitsTitle}>Plus Premium Benefits</Text>
-            <View style={styles.benefitsList}>
-              <View style={styles.benefitItem}>
-                <Check size={14} color={colors.success} strokeWidth={2.5} />
-                <Text style={styles.benefitText}>Offline access to all premium content</Text>
-              </View>
-              <View style={styles.benefitItem}>
-                <Check size={14} color={colors.success} strokeWidth={2.5} />
-                <Text style={styles.benefitText}>Future premium features included</Text>
-              </View>
-              <View style={styles.benefitItem}>
-                <Check size={14} color={colors.success} strokeWidth={2.5} />
-                <Text style={styles.benefitText}>Priority customer support</Text>
-              </View>
-              <View style={styles.benefitItem}>
-                <Check size={14} color={colors.success} strokeWidth={2.5} />
-                <Text style={styles.benefitText}>Ad-free experience</Text>
-              </View>
+                  <Text style={[
+                    styles.pricingPlanSubtext,
+                    selectedPlan === 'monthly' && styles.selectedPlanSubtext
+                  ]}>
+                    Cancel anytime
+                  </Text>
+                </LinearGradient>
+              </TouchableOpacity>
             </View>
-          </Animated.View>
 
-          {/* Action Buttons */}
-          <Animated.View 
-            style={styles.actionsContainer}
-            entering={FadeInDown.delay(900).springify()}
-          >
-            <TouchableOpacity 
-              style={styles.purchaseButton}
-              onPress={onPurchase}
-              disabled={isLoading}
-            >
-              <LinearGradient
-                colors={['#FFD700', '#FFA500']}
-                style={styles.purchaseButtonGradient}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
+            {/* Action Buttons */}
+            <View style={styles.actionsContainer}>
+              <TouchableOpacity 
+                style={styles.purchaseButton}
+                onPress={() => onPurchase(selectedPlan)}
+                disabled={isLoading}
               >
-                <Crown size={20} color="#ffffff" strokeWidth={2.5} />
-                <Text style={styles.purchaseButtonText}>
-                  {isLoading ? 'Processing...' : `Start ${selectedPlan === 'annual' ? 'Annual' : 'Monthly'} Plan`}
-                </Text>
-              </LinearGradient>
-            </TouchableOpacity>
+                <LinearGradient
+                  colors={['#FFD700', '#FFA500']}
+                  style={styles.purchaseButtonGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                >
+                  <Crown size={20} color="#ffffff" strokeWidth={2.5} />
+                  <Text style={styles.purchaseButtonText}>
+                    {isLoading ? 'Processing...' : `Start ${selectedPlan === 'annual' ? 'Annual' : 'Monthly'} Plan`}
+                  </Text>
+                </LinearGradient>
+              </TouchableOpacity>
 
-            <TouchableOpacity 
-              style={styles.restoreButton}
-              onPress={onRestore}
-              disabled={isLoading}
-            >
-              <Text style={styles.restoreButtonText}>Restore Purchases</Text>
-            </TouchableOpacity>
-          </Animated.View>
+              <TouchableOpacity 
+                style={styles.restoreButton}
+                onPress={onRestore}
+                disabled={isLoading}
+              >
+                <Text style={styles.restoreButtonText}>Restore Purchases</Text>
+              </TouchableOpacity>
+            </View>
 
-          {/* Legal Text */}
-          <Animated.View 
-            style={styles.legalContainer}
-            entering={FadeInDown.delay(1000).springify()}
-          >
-            <Text style={styles.legalText}>
-              Subscription automatically renews unless auto-renew is turned off at least 24 hours 
-              before the end of the current period. Payment will be charged to your account at 
-              confirmation of purchase.
-            </Text>
-          </Animated.View>
-        </ScrollView>
-      </Animated.View>
-    </View>
+            {/* Legal Text */}
+            <View style={styles.legalContainer}>
+              <Text style={styles.legalText}>
+                Subscription automatically renews unless auto-renew is turned off at least 24 hours 
+                before the end of the current period.
+              </Text>
+            </View>
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
 const createStyles = (colors: any) => StyleSheet.create({
   overlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.8)',
     justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 1000,
     paddingHorizontal: 20,
   },
   modal: {
@@ -316,6 +250,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     maxWidth: 500,
     width: '100%',
     maxHeight: '90%',
+    minHeight: 400, // Ensure minimum height so modal doesn't collapse
     ...Platform.select({
       ios: {
         shadowColor: colors.shadow,
@@ -335,7 +270,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     }),
   },
   scrollView: {
-    flex: 1,
+    flexGrow: 1, // Changed from flex: 1 to flexGrow: 1
   },
   header: {
     flexDirection: 'row',
@@ -406,6 +341,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     overflow: 'hidden',
     borderWidth: 2,
     borderColor: colors.border,
+    backgroundColor: colors.card, // Add solid background color for shadow calculation
     ...Platform.select({
       ios: {
         shadowColor: colors.shadow,
@@ -579,6 +515,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     borderRadius: 16,
     overflow: 'hidden',
     marginBottom: 12,
+    backgroundColor: '#FFD700', // Add solid background color for shadow calculation
     ...Platform.select({
       ios: {
         shadowColor: '#FFD700',

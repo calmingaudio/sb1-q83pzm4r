@@ -564,7 +564,7 @@ export default function JournalScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={["left", "right", "bottom"]}>
       {/* Modern Header */}
       <Animated.View 
         style={styles.header}
@@ -643,6 +643,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 16,
+    marginTop: 10,
   },
   headerBackButton: {
     width: 44,
@@ -1030,6 +1031,7 @@ const createStyles = (colors: any) => StyleSheet.create({
   continueButton: {
     borderRadius: 16,
     overflow: 'hidden',
+    backgroundColor: colors.primary, // Add solid background color for shadow calculation
     ...Platform.select({
       ios: {
         shadowColor: colors.text,

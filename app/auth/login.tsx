@@ -1,158 +1,233 @@
-// app/auth/login.tsx
-import React, { useState, useRef } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
-  Platform,
-  Image,
-  Alert,
-  ColorValue,
-  ScrollView,
-  KeyboardAvoidingView,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { LinearGradient } from "expo-linear-gradient";
-import { ArrowLeft, Mail, Apple, Sparkles } from 'lucide-react-native';
-import { useTheme } from "@/components/ThemeProvider";
-import { router } from "expo-router";
-import { useAuth } from "../../context/authContext";
+// app/auth/signin.tsx
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Platform, Alert } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
+import { ArrowLeft, Mail, Sparkles } from 'lucide-react-native';
+import { useTheme } from '@/components/ThemeProvider';
+import { useAuth } from '@/context/authContext';
+import { useOfflineContext } from '@/components/OfflineProvider';
+import { router } from 'expo-router';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
-import Colors from '@/constants/Colors';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
-import { faApple, faGoogle } from '@fortawesome/free-brands-svg-icons';
+import { faGoogle, faApple } from '@fortawesome/free-brands-svg-icons';
 
-
-export default function LoginScreen() {
+export default function SignInScreen() {
   const { colors } = useTheme();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const { signInWithGoogle, sendMagicLink, signInWithApple, signInWithEmail, signUpWithEmail } = useAuth();
+  const { isOnline, shouldUseOfflineMode, createMockOfflineUser } = useOfflineContext();
+  
+  const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [errors, setErrors] = useState<{ email?: string; general?: string }>({});
 
-  const passwordInputRef = useRef<TextInput>(null);
-  const { signInWithEmail, signInWithApple, signInWithGoogle } = useAuth();
-
-  const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert("Missing Fields", "Please enter both email and password.");
-      return;
+  const validateForm = () => {
+    const newErrors: typeof errors = {};
+    
+    if (!email) {
+      newErrors.email = 'Email is required';
+    } else if (!/\S+@\S+\.\S+/.test(email)) {
+      newErrors.email = 'Please enter a valid email';
     }
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSignIn = async () => {
+    if (!validateForm()) return;
+    
     setIsLoading(true);
+    setErrors({});
+    
     try {
-      const result = await signInWithEmail(email, password);
-      if (!result.success) {
-        Alert.alert("Login Error", result.error);
+      const result = await sendMagicLink(email);
+      if (result.success) {
+        router.push({
+          pathname: '/auth/verify',
+          params: { email, type: 'signin' }
+        });
+      } else {
+        setErrors({ general: result.error || 'Failed to send magic link' });
       }
-      // On success, the root layout guard will handle navigation
-    } catch (error: any) {
-      Alert.alert("Login Error", error.message);
+    } catch (error) {
+      setErrors({ general: 'An unexpected error occurred' });
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleGoogleSignIn = async () => {
+    // Note: This would require Google Sign-In SDK integration
+    Alert.alert(
+      'Google Sign In',
+      'Google Sign In requires additional setup with the Google Sign-In SDK. Please export this project and follow the Firebase documentation to complete the integration.',
+      [{ text: 'OK' }]
+    );
   };
 
   const handleAppleSignIn = async () => {
     try {
       const result = await signInWithApple();
       if (!result.success) {
-        Alert.alert('Sign-In Error', result.error || 'Could not sign in with Apple. Please try again.');
+        // More specific error messages based on common issues
+        let errorMessage = result.error || 'Could not sign in with Apple. Please try again.';
+        
+        if (result.error?.includes('authorization attempt failed')) {
+          errorMessage = 'Apple Sign-In failed. Please ensure:\n\n• You\'re testing on a real iOS device (not simulator)\n• Your Apple ID is signed in\n• Sign In with Apple is enabled in Settings';
+        }
+        
+        Alert.alert('Apple Sign-In Error', errorMessage);
       }
     } catch (error: any) {
-      Alert.alert('Sign-In Error', 'Could not sign in with Apple. Please try again.');
+      console.error('Apple Sign-In caught error:', error);
+      Alert.alert(
+        'Apple Sign-In Error', 
+        'Could not sign in with Apple. Please ensure you\'re using a real iOS device and try again.'
+      );
     }
   };
 
-  const handleGoogleSignIn = async () => {
+  // Debug sign-in for simulator testing
+  const handleDebugSignIn = async () => {
+    const testEmail = 'test@simulator.dev';
+    const testPassword = 'TestPass123!';
+    const testName = 'Test User';
+    
+    console.log('Debug sign-in initiated. Network status:', { isOnline, shouldUseOfflineMode });
+    
+    setIsLoading(true);
+    setErrors({});
+    
     try {
-      // For now, we'll use a placeholder ID token
-      // In a real implementation, you'd get this from Google Sign-In SDK
-      const idToken = "placeholder_google_id_token";
-      const result = await signInWithGoogle(idToken);
-      if (!result.success) {
-        Alert.alert('Google Sign-In Error', result.error || 'Could not sign in with Google. Please try again.');
+      if (isOnline && !shouldUseOfflineMode) {
+        // Online mode - try Firebase authentication
+        let result = await signInWithEmail(testEmail, testPassword);
+        
+        // If sign-in fails, try to create the account
+        if (!result.success) {
+          result = await signUpWithEmail(testEmail, testPassword, testName);
+        }
+        
+        if (!result.success) {
+          setErrors({ general: result.error || 'Debug sign-in failed' });
+        }
+        // If successful, user will be automatically redirected via auth state change
+      } else {
+        // Offline mode - create mock offline user
+        const result = await createMockOfflineUser(testEmail, testName);
+        
+        if (result.success) {
+          console.log('Debug sign-in successful (offline mode)');
+          // User will be automatically redirected via auth state change
+        } else {
+          setErrors({ general: result.error || 'Debug sign-in failed' });
+        }
       }
-    } catch (error: any) {
-      Alert.alert('Google Sign-In Error', 'Could not sign in with Google. Please try again.');
+    } catch (error) {
+      console.error('Debug sign-in error:', error);
+      setErrors({ general: 'Debug sign-in failed' });
+    } finally {
+      setIsLoading(false);
     }
   };
+
+  const styles = createStyles(colors);
 
   return (
-    <SafeAreaView style={styles.container} edges={["bottom", "left", "right"]}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={styles.flexContainer}
+    <SafeAreaView style={styles.container}>
+      {/* Header */}
+      <Animated.View 
+        style={styles.header}
+        entering={FadeInUp.delay(100).springify()}
       >
-        <LinearGradient
-          colors={
-            Colors.light.gradient.primary as [
-              ColorValue,
-              ColorValue,
-              ...ColorValue[],
-            ]
-          }
-          style={styles.header}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
+        <TouchableOpacity 
+          style={styles.backButton}
+          onPress={() => router.back()}
         >
-          <Image
-            source={{
-              uri: "https://images.pexels.com/photos/2007401/pexels-photo-2007401.jpeg",
-            }}
-            style={styles.headerImage}
-          />
-          <View style={styles.overlay} />
-          <Text style={styles.title}>Welcome Back</Text>
-          <Text style={styles.subtitle}>Sign in to continue your journey</Text>
-        </LinearGradient>
+          <ArrowLeft size={24} color={colors.text} strokeWidth={2} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Welcome Back</Text>
+        <View style={styles.headerSpacer} />
+      </Animated.View>
 
-        <ScrollView
-          style={styles.content}
-          contentContainerStyle={styles.scrollContentContainer}
-          keyboardShouldPersistTaps="handled"
+      <View style={styles.content}>
+        {/* Title Section */}
+        <Animated.View 
+          style={styles.titleSection}
+          entering={FadeInDown.delay(200).springify()}
         >
+          <Text style={styles.title}>Sign In</Text>
+          <Text style={styles.subtitle}>
+            Continue your journey to peaceful flying
+          </Text>
+        </Animated.View>
+
+        {/* Magic Link Info */}
+        <Animated.View 
+          style={styles.magicLinkInfo}
+          entering={FadeInDown.delay(250).springify()}
+        >
+          <Sparkles size={20} color={colors.primary} strokeWidth={2} />
+          <View style={styles.magicLinkTextContainer}>
+            <Text style={styles.magicLinkTitle}>Passwordless Sign In</Text>
+            <Text style={styles.magicLinkText}>
+              We'll send you a secure link to sign in - no password needed!
+            </Text>
+          </View>
+        </Animated.View>
+
+        {/* Form */}
+        <Animated.View 
+          style={styles.form}
+          entering={FadeInDown.delay(300).springify()}
+        >
+          {/* General Error */}
+          {errors.general && (
+            <View style={styles.errorContainer}>
+              <Text style={styles.errorText}>{errors.general}</Text>
+            </View>
+          )}
+
+          {/* Email Input */}
           <View style={styles.inputContainer}>
-            <Text style={styles.label}>Email Address</Text>
-            <TextInput
-              style={styles.input}
-              value={email}
-              onChangeText={setEmail}
-              placeholder="Enter your email"
-              placeholderTextColor={Colors.light.textSecondary}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoComplete="email"
-              returnKeyType="next"
-              onSubmitEditing={() => passwordInputRef.current?.focus()}
-            />
+            <Text style={styles.label}>Email</Text>
+            <View style={[
+              styles.inputWrapper,
+              errors.email ? styles.inputError : undefined
+            ]}>
+              <Mail size={20} color={colors.textSecondary} strokeWidth={2} />
+              <TextInput
+                style={styles.input}
+                value={email}
+                onChangeText={setEmail}
+                placeholder="Enter your email"
+                placeholderTextColor={colors.textSecondary}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoComplete="email"
+              />
+            </View>
+            {errors.email && <Text style={styles.fieldError}>{errors.email}</Text>}
           </View>
 
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Password</Text>
-            <TextInput
-              ref={passwordInputRef}
-              style={styles.input}
-              value={password}
-              onChangeText={setPassword}
-              placeholder="Enter your password"
-              placeholderTextColor={Colors.light.textSecondary}
-              secureTextEntry
-              autoCapitalize="none"
-              returnKeyType="go"
-              onSubmitEditing={handleLogin}
-            />
-          </View>
-
+          {/* Sign In Button */}
           <TouchableOpacity
-            style={[styles.button, styles.emailButton]}
-            onPress={handleLogin}
+            style={[styles.signInButton, isLoading && styles.buttonDisabled]}
+            onPress={handleSignIn}
             disabled={isLoading}
           >
-            <Mail size={20} color="#ffffff" />
-            <Text style={styles.buttonText}>
-              {isLoading ? "Signing In..." : "Sign In"}
-            </Text>
+            <LinearGradient
+              colors={colors.gradient.primary}
+              style={styles.signInButtonGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            >
+              <Sparkles size={20} color="#ffffff" strokeWidth={2} />
+              <Text style={styles.signInButtonText}>
+                {isLoading ? 'Sending Magic Link...' : 'Send Magic Link'}
+              </Text>
+            </LinearGradient>
           </TouchableOpacity>
 
           {/* Divider */}
@@ -164,169 +239,292 @@ export default function LoginScreen() {
 
           {/* Social Sign In */}
           <View style={styles.socialButtons}>
-            <TouchableOpacity style={styles.socialButton} onPress={handleGoogleSignIn}>
-              <FontAwesomeIcon icon={faGoogle} size={20} color={Colors.light.text} />
+            <TouchableOpacity 
+              style={styles.socialButton} 
+              onPress={handleGoogleSignIn}
+              disabled={isLoading}
+            >
+              <FontAwesomeIcon icon={faGoogle} size={20} color={colors.text} />
               <Text style={styles.socialButtonLabel}>Google</Text>
             </TouchableOpacity>
 
             {Platform.OS === 'ios' && (
-              <TouchableOpacity style={styles.socialButton} onPress={handleAppleSignIn}>
-                <FontAwesomeIcon icon={faApple} size={20} color={Colors.light.text} />
+              <TouchableOpacity 
+                style={[styles.socialButton, styles.appleButton]} 
+                onPress={handleAppleSignIn}
+                disabled={isLoading}
+              >
+                <FontAwesomeIcon icon={faApple} size={20} color={colors.text} />
                 <Text style={styles.socialButtonLabel}>Apple</Text>
               </TouchableOpacity>
             )}
           </View>
 
-          <TouchableOpacity
-            style={styles.switchScreenButton}
-            onPress={() => router.replace("/auth/signup")}
-          >
-            <Text style={styles.switchScreenText}>
-              Don't have an account?{" "}
-              <Text style={styles.link}>Sign Up</Text>
-            </Text>
-          </TouchableOpacity>
-        </ScrollView>
-      </KeyboardAvoidingView>
+          {/* Debug Sign In - Only show in development/simulator */}
+          {__DEV__ && (
+            <TouchableOpacity 
+              style={[styles.debugButton]}
+              onPress={handleDebugSignIn}
+              disabled={isLoading}
+            >
+              <Text style={styles.debugButtonText}>
+                🧪 Debug Sign-In ({shouldUseOfflineMode ? 'Offline' : 'Online'} Mode)
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Sign Up Link */}
+          <View style={styles.signUpContainer}>
+            <Text style={styles.signUpText}>Don't have an account? </Text>
+            <TouchableOpacity onPress={() => router.push('/auth/signup')}>
+              <Text style={styles.signUpLink}>Sign Up</Text>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+      </View>
     </SafeAreaView>
   );
 }
 
-// Use the same styles from your signup screen, with one addition
-const styles = StyleSheet.create({
-  // ... (copy all styles from signup.tsx)
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.light.background,
-  },
-  flexContainer: {
-    flex: 1,
+    backgroundColor: colors.background,
   },
   header: {
-    minHeight: 250,
-    justifyContent: "flex-end",
-    padding: 24,
-    paddingTop: 60,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 16,
   },
-  headerImage: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.backgroundSecondary,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  overlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "rgba(0, 0, 0, 0.3)",
-  },
-  title: {
-    fontFamily: "Inter-SemiBold",
-    fontSize: 32,
-    color: "#ffffff",
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontFamily: "Inter-Regular",
+  headerTitle: {
+    fontFamily: 'Inter-SemiBold',
     fontSize: 18,
-    color: "rgba(255, 255, 255, 0.9)",
+    color: colors.text,
+    flex: 1,
+    textAlign: 'center',
+  },
+  headerSpacer: {
+    width: 40,
   },
   content: {
     flex: 1,
+    paddingHorizontal: 24,
   },
-  scrollContentContainer: {
-    padding: 24,
+  titleSection: {
+    marginBottom: 24,
   },
-  inputContainer: {
-    marginBottom: 20,
-  },
-  label: {
-    fontFamily: "Inter-Medium",
-    fontSize: 16,
-    color: Colors.light.text,
+  title: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 32,
+    color: colors.text,
     marginBottom: 8,
   },
-  input: {
-    backgroundColor: "#ffffff",
-    borderRadius: 12,
-    padding: 16,
-    fontFamily: "Inter-Regular",
+  subtitle: {
+    fontFamily: 'Inter-Regular',
     fontSize: 16,
-    color: Colors.light.text,
-    borderWidth: 1,
-    borderColor: Colors.light.border,
+    color: colors.textSecondary,
+    lineHeight: 24,
   },
-  button: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 16,
+  magicLinkInfo: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: colors.primary + '10',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 32,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: colors.primary + '20',
+  },
+  magicLinkTextContainer: {
+    flex: 1,
+  },
+  magicLinkTitle: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 16,
+    color: colors.primary,
+    marginBottom: 4,
+  },
+  magicLinkText: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 14,
+    color: colors.primary,
+    lineHeight: 20,
+  },
+  form: {
+    flex: 1,
+  },
+  errorContainer: {
+    backgroundColor: colors.error + '20',
     borderRadius: 12,
-    marginBottom: 16,
+    padding: 16,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: colors.error + '40',
+  },
+  errorText: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 14,
+    color: colors.error,
+    textAlign: 'center',
+  },
+  inputContainer: {
+    marginBottom: 32,
+  },
+  label: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 16,
+    color: colors.text,
+    marginBottom: 8,
+  },
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
     gap: 12,
   },
-  emailButton: {
-    backgroundColor: Colors.light.primary,
+  inputError: {
+    borderColor: colors.error,
   },
-  buttonText: {
-    fontFamily: "Inter-SemiBold",
+  input: {
+    flex: 1,
+    fontFamily: 'Inter-Regular',
     fontSize: 16,
-    color: "#ffffff",
+    color: colors.text,
   },
-  // New style for the switch button
-  switchScreenButton: {
-    marginTop: 16,
-    alignItems: "center",
-  },
-  switchScreenText: {
-    fontFamily: "Inter-Regular",
+  fieldError: {
+    fontFamily: 'Inter-Regular',
     fontSize: 14,
-    color: Colors.light.textSecondary,
+    color: colors.error,
+    marginTop: 4,
   },
-  link: {
-    color: Colors.light.primary,
-    fontFamily: "Inter-SemiBold",
+  signInButton: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 32,
+    backgroundColor: colors.primary, // Add solid background color for shadow calculation
+    ...Platform.select({
+      ios: {
+        shadowColor: colors.shadow,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 1,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 4,
+      },
+      web: {
+        shadowColor: colors.shadow,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 1,
+        shadowRadius: 8,
+      },
+    }),
+  },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
+  signInButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 18,
+    gap: 8,
+  },
+  signInButtonText: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 16,
+    color: '#ffffff',
   },
   divider: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginVertical: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 24,
   },
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: Colors.light.border,
+    backgroundColor: colors.border,
   },
   dividerText: {
-    fontFamily: "Inter-Regular",
+    fontFamily: 'Inter-Regular',
     fontSize: 14,
-    color: Colors.light.textSecondary,
+    color: colors.textSecondary,
     marginHorizontal: 16,
   },
   socialButtons: {
-    flexDirection: "row",
+    flexDirection: 'row',
     gap: 12,
-    marginBottom: 24,
+    marginBottom: 32,
   },
   socialButton: {
     flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: Colors.light.card,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.card,
     borderRadius: 12,
     paddingVertical: 16,
-    paddingHorizontal: 20,
     borderWidth: 1,
-    borderColor: Colors.light.border,
+    borderColor: colors.border,
     gap: 8,
   },
+  socialButtonText: {
+    fontSize: 20,
+  },
   socialButtonLabel: {
-    fontFamily: "Inter-Medium",
+    fontFamily: 'Inter-Medium',
     fontSize: 16,
-    color: Colors.light.text,
+    color: colors.text,
+  },
+  signUpContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 'auto',
+    paddingBottom: 24,
+  },
+  signUpText: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  signUpLink: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 14,
+    color: colors.primary,
+  },
+  appleButton: {
+    backgroundColor: colors.appleButton,
+    borderColor: colors.appleButtonBorder,
+  },
+  debugButton: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    paddingVertical: 16,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    marginTop: 16,
+    borderStyle: 'dashed',
+  },
+  debugButtonText: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 16,
+    color: colors.primary,
+    textAlign: 'center',
   },
 });

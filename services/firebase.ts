@@ -2,7 +2,7 @@
 import { initializeApp, getApp, getApps } from "firebase/app";
 import { initializeAuth, getReactNativePersistence, Auth } from "firebase/auth";
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getFirestore } from "firebase/firestore";
+import { getFirestore, connectFirestoreEmulator, enableNetwork, disableNetwork } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: "AIzaSyA1aMfrmOi7g8aW5Ruu_kYHDD73-tDOIow",
@@ -30,3 +30,44 @@ export const getFirebaseAuth = (): Auth => {
 };
 
 export const db = getFirestore(app);
+
+// Suppress Firebase warnings in development mode
+if (__DEV__) {
+  // Override console.warn to filter out Firebase connection warnings
+  const originalWarn = console.warn;
+  console.warn = (...args) => {
+    const message = args[0];
+    if (typeof message === 'string') {
+      // Filter out common Firebase connection warnings
+      if (
+        message.includes('WebChannelConnection RPC') ||
+        message.includes('transport errored') ||
+        message.includes('Firestore') ||
+        message.includes('Listen stream')
+      ) {
+        // Suppress these warnings in development
+        return;
+      }
+    }
+    originalWarn.apply(console, args);
+  };
+}
+
+// Helper functions for offline/online management
+export const enableFirestoreNetwork = async () => {
+  try {
+    await enableNetwork(db);
+    console.log('Firestore network enabled');
+  } catch (error) {
+    console.warn('Failed to enable Firestore network:', error);
+  }
+};
+
+export const disableFirestoreNetwork = async () => {
+  try {
+    await disableNetwork(db);
+    console.log('Firestore network disabled');
+  } catch (error) {
+    console.warn('Failed to disable Firestore network:', error);
+  }
+};

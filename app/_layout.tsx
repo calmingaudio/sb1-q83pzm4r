@@ -1,5 +1,5 @@
 // app/_layout.tsx
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Stack, SplashScreen, router, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
@@ -16,15 +16,18 @@ import { ThemeProvider } from '@/components/ThemeProvider';
 import ConsentBanner from '@/components/ConsentBanner';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { KeyboardAvoidingView, Platform } from 'react-native';
-import { AuthProvider, useAuth } from '@/context/authContext';
+import { AuthProvider } from '@/context/authContext';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { useAuthentication } from '@/hooks/useAuthentication';
+import { useOfflineContext } from '@/components/OfflineProvider';
+import { PremiumProvider, usePremium } from '@/context/premiumContext';
+import PremiumModal from '@/components/premium/PremiumModal';
 
 SplashScreen.preventAutoHideAsync();
 
 function AppNavigation() {
-  const { user, isLoading } = useAuthentication();
+  const { isAuthenticated, isLoading, isOfflineMode } = useOfflineContext();
   const pathname = usePathname();
+  const [isMounted, setIsMounted] = useState(false);
 
   const [fontsLoaded, fontError] = useFonts({
     'Inter-Regular': Inter_400Regular,
@@ -42,28 +45,36 @@ function AppNavigation() {
   }, [isLoading, fontsLoaded, fontError]);
 
   useEffect(() => {
-    if (isLoading) {
+    setIsMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (isLoading || (!fontsLoaded && !fontError) || !isMounted) {
       return;
     }
 
-    const inAuthGroup = pathname.startsWith("/auth");
+    // Use a timeout to ensure the navigator is mounted before navigating
+    const timeout = setTimeout(() => {
+      const inAuthGroup = pathname.startsWith("/auth");
 
-    if (user) {
-      if (inAuthGroup) {
-        router.replace("/(tabs)");
+      if (isAuthenticated) {
+        if (inAuthGroup) {
+          router.replace('/(tabs)');
+        }
+      } else {
+        if (!inAuthGroup && pathname !== "/onboarding") {
+          router.replace("/auth/welcome");
+        }
       }
-    } else {
-      if (!inAuthGroup && pathname !== "/onboarding") {
-        router.replace("/auth/login");
-      }
-    }
-  }, [user, isLoading, pathname]);
+    }, 100);
+
+    return () => clearTimeout(timeout);
+  }, [isAuthenticated, isLoading, pathname, fontsLoaded, fontError, isMounted]);
 
   // Show nothing until auth and fonts are ready.
   if (isLoading || (!fontsLoaded && !fontError)) {
     return null;
   }
-
 
   // Always render the Stack navigator
   return (
@@ -80,12 +91,50 @@ function AppNavigation() {
         options={{
           presentation: 'modal',
           gestureEnabled: true,
-          gestureResponseDistance: { top: 100 },
         }}
       />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="+not-found" options={{ title: 'Oops!' }} />
     </Stack>
+  );
+}
+
+function RootLayoutNav() {
+  const { 
+    isPremiumModalVisible, 
+    hidePremiumModal, 
+    purchasePlan, 
+    restorePurchases,
+    isLoading 
+  } = usePremium();
+
+  const handlePurchase = async (planId: 'monthly' | 'annual') => {
+    const success = await purchasePlan(planId);
+    if (success) {
+      hidePremiumModal();
+    }
+  };
+
+  const handleRestore = async () => {
+    await restorePurchases();
+    // Assuming restorePurchases will show an alert on its own.
+    // You might want to hide the modal if restore is successful.
+    // This part depends on the logic inside restorePurchases.
+  };
+
+  return (
+    <>
+      <AppNavigation />
+      <StatusBar style="auto" />
+      <ConsentBanner />
+      <PremiumModal
+        visible={isPremiumModalVisible}
+        onClose={hidePremiumModal}
+        onPurchase={handlePurchase}
+        onRestore={handleRestore}
+        isLoading={isLoading}
+      />
+    </>
   );
 }
 
@@ -100,13 +149,13 @@ export default function RootLayout() {
           <ThemeProvider>
             <AuthProvider>
               <AnalyticsProvider>
-                <OfflineProvider>
-                  <GamificationProvider>
-                    <AppNavigation />
-                    <StatusBar style="auto" />
-                    <ConsentBanner />
-                  </GamificationProvider>
-                </OfflineProvider>
+                <PremiumProvider>
+                  <OfflineProvider>
+                    <GamificationProvider>
+                      <RootLayoutNav />
+                    </GamificationProvider>
+                  </OfflineProvider>
+                </PremiumProvider>
               </AnalyticsProvider>
             </AuthProvider>
           </ThemeProvider>

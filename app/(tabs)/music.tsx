@@ -1,14 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, ScrollView, Dimensions, Image, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, ScrollView, Dimensions, Image, Alert, Pressable, GestureResponderEvent, LayoutChangeEvent } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Heart, Shuffle, Repeat, Music as MusicIcon, Headphones, Clock, Star, Crown, Lock, Download, Trash2, Brain } from 'lucide-react-native';
+import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Music as MusicIcon, Headphones, Clock, Star, Crown, Lock, Download, Trash2, Brain } from 'lucide-react-native';
 import { useTheme } from '@/components/ThemeProvider';
-import Animated, { FadeIn, FadeInDown, FadeInUp, useSharedValue, useAnimatedStyle, withTiming, withRepeat } from 'react-native-reanimated';
-import { usePremium } from '@/hooks/usePremium';
+import Animated, { FadeIn, FadeInDown, FadeInUp } from 'react-native-reanimated';
+import { usePremium } from '@/context/premiumContext';
 import { useOfflineMusic } from '@/hooks/useOfflineMusic';
 import { useAudioPlayer } from '@/hooks/useAudioPlayer';
-import PremiumModal from '@/components/premium/PremiumModal';
 import PremiumBadge from '@/components/premium/PremiumBadge';
 import DownloadButton from '@/components/music/DownloadButton';
 import OfflineIndicator from '@/components/music/OfflineIndicator';
@@ -429,12 +428,11 @@ export default function MusicScreen() {
   const { colors } = useTheme();
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
   const [selectedCategory, setSelectedCategory] = useState('all');
-  const [showPremiumModal, setShowPremiumModal] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
   const [showDownloadManager, setShowDownloadManager] = useState(false);
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
+  const volumeSliderWidth = useRef(0);
 
-  const { isPremium, isLoading: premiumLoading, simulatePremiumPurchase, restorePurchases } = usePremium();
+  const { isPremium, isLoading, showPremiumModal } = usePremium();
   const { 
     downloadedTracks, 
     downloadProgress, 
@@ -453,19 +451,23 @@ export default function MusicScreen() {
 
   useEffect(() => {
     // Handle deep linking from Quick Actions
+    // Don't process if premium context is still loading
+    if (isLoading) {
+      return;
+    }
+    
     if (categoryParam) {
       // Map 'nature' to 'sounds' for backward compatibility
       const mappedCategory = categoryParam === 'nature' ? 'sounds' : categoryParam;
       const targetCategory = categories.find(cat => cat.id === mappedCategory);
       if (targetCategory) {
-        if (targetCategory.isPremium && !isPremium) {
-          setShowPremiumModal(true);
-        } else {
-          setSelectedCategory(mappedCategory as string);
-        }
+        // Just set the category, don't show premium modal automatically
+        // Let users browse the category and see what's available
+        // Modal will show when they try to interact with premium content
+        setSelectedCategory(mappedCategory as string);
       }
     }
-  }, [categoryParam, isPremium]);
+  }, [categoryParam, isPremium, isLoading]);
 
   const getFilteredTracks = () => {
     if (selectedCategory === 'downloaded') {
@@ -480,7 +482,7 @@ export default function MusicScreen() {
 
   const handleTrackSelect = async (track: Track) => {
     if (track.isPremium && !isPremium) {
-      setShowPremiumModal(true);
+      showPremiumModal();
       return;
     }
 
@@ -503,7 +505,7 @@ export default function MusicScreen() {
   const handleCategorySelect = (categoryId: string) => {
     const category = categories.find(c => c.id === categoryId);
     if (category?.isPremium && !isPremium) {
-      setShowPremiumModal(true);
+      showPremiumModal();
       return;
     }
     setSelectedCategory(categoryId);
@@ -511,7 +513,7 @@ export default function MusicScreen() {
 
   const handleDownload = async (track: Track) => {
     if (track.isPremium && !isPremium) {
-      setShowPremiumModal(true);
+      showPremiumModal();
       return;
     }
 
@@ -559,29 +561,6 @@ export default function MusicScreen() {
         }
       ]
     );
-  };
-
-  const handlePremiumPurchase = async () => {
-    setIsProcessing(true);
-    try {
-      await simulatePremiumPurchase();
-      setShowPremiumModal(false);
-    } catch (error) {
-      console.error('Error purchasing premium:', error);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const handleRestorePurchases = async () => {
-    setIsProcessing(true);
-    try {
-      await restorePurchases();
-    } catch (error) {
-      console.error('Error restoring purchases:', error);
-    } finally {
-      setIsProcessing(false);
-    }
   };
 
   const getCategoryDisplayName = (categoryId: string) => {
@@ -635,361 +614,371 @@ export default function MusicScreen() {
   const styles = createStyles(colors);
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Premium Modal */}
-      <PremiumModal
-        visible={showPremiumModal}
-        onClose={() => setShowPremiumModal(false)}
-        onPurchase={handlePremiumPurchase}
-        onRestore={handleRestorePurchases}
-        isLoading={isProcessing}
-      />
-
-      {/* Header */}
-      <Animated.View 
-        style={styles.header}
-        entering={FadeInUp.delay(100).springify()}
-      >
-        <LinearGradient
-          colors={['#8b5cf6', '#a855f7', '#c084fc']}
-          style={styles.headerGradient}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-        >
-          <View style={styles.headerContent}>
-            <View style={styles.headerTop}>
-              <View style={styles.titleContainer}>
-                <Text style={styles.title}>Music, Sounds, Meditations</Text>
-                <Text style={styles.subtitle}>
-                  Soothing sounds and guided meditations{'\n'}for your journey
-                </Text>
-              </View>
-              {downloadedTracks.length > 0 && (
-                <TouchableOpacity 
-                  style={styles.downloadManagerButton}
-                  onPress={() => setShowDownloadManager(!showDownloadManager)}
-                >
-                  <Download size={20} color="#ffffff" strokeWidth={2} />
-                </TouchableOpacity>
-              )}
-            </View>
-          </View>
-          {downloadedTracks.length > 0 && (
-            <View style={styles.headerStats}>
-              <View style={styles.statItem}>
-                <Download size={16} color="rgba(255, 255, 255, 0.8)" strokeWidth={2} />
-                <Text style={styles.statText}>{downloadedTracks.length} offline</Text>
-              </View>
-            </View>
-          )}
-        </LinearGradient>
-      </Animated.View>
-
-      {/* Offline Indicator */}
-      <OfflineIndicator
-        downloadedCount={downloadedTracks.length}
-        totalSize={formatFileSize(getTotalDownloadSize())}
-        isVisible={downloadedTracks.length > 0}
-      />
-
-      {/* Download Manager */}
-      {showDownloadManager && downloadedTracks.length > 0 && (
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      <SafeAreaView style={styles.container} edges={["left", "right", "bottom"]}>
+        {/* Header */}
         <Animated.View 
-          style={styles.downloadManager}
-          entering={FadeInDown.delay(200).springify()}
+          style={styles.header}
+          entering={FadeInUp.delay(100).springify()}
         >
-          <View style={styles.downloadManagerHeader}>
-            <Text style={styles.downloadManagerTitle}>Downloaded Tracks</Text>
-            <TouchableOpacity 
-              style={styles.clearAllButton}
-              onPress={handleClearAllDownloads}
-            >
-              <Trash2 size={16} color={colors.error} strokeWidth={2} />
-              <Text style={styles.clearAllText}>Clear All</Text>
-            </TouchableOpacity>
-          </View>
-          <Text style={styles.downloadManagerSubtitle}>
-            {downloadedTracks.length} tracks • {formatFileSize(getTotalDownloadSize())}
-          </Text>
-        </Animated.View>
-      )}
-
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Now Playing Card */}
-        {currentTrack && (
-          <Animated.View 
-            style={styles.nowPlayingCard}
-            entering={FadeIn.delay(200)}
+          <LinearGradient
+            colors={['#9333ea', '#a855f7', '#c084fc']}
+            style={styles.headerGradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
           >
-            <Image 
-              source={getImageSource(currentTrack)}
-              style={styles.nowPlayingImage}
-              onError={() => handleImageError(currentTrack.id)}
-              resizeMode="cover"
-            />
-            <LinearGradient
-              colors={['transparent', 'rgba(0,0,0,0.8)']}
-              style={styles.nowPlayingOverlay}
-            />
-            
-            {/* Premium Badge for Premium Tracks */}
-            {currentTrack.isPremium && (
-              <View style={styles.nowPlayingPremiumBadge}>
-                <PremiumBadge size="small" />
+            <View style={styles.headerContent}>
+              <View style={styles.headerTop}>
+                <View style={styles.titleContainer}>
+                  <Text style={[styles.title, { color: '#ffffff', opacity: 1 }]}>Music, Sounds, Meditations</Text>
+                  <Text style={[styles.subtitle, { color: '#ffffff', opacity: 0.9 }]}>
+                    Soothing sounds and guided meditations{'\n'}for your journey
+                  </Text>
+                </View>
+                {downloadedTracks.length > 0 && (
+                  <TouchableOpacity 
+                    style={[styles.downloadManagerButton, { backgroundColor: 'rgba(255, 255, 255, 0.3)' }]}
+                    onPress={() => setShowDownloadManager(!showDownloadManager)}
+                  >
+                    <Download size={20} color="#ffffff" strokeWidth={2} />
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+            {downloadedTracks.length > 0 && (
+              <View style={styles.headerStats}>
+                <View style={styles.statItem}>
+                  <Download size={16} color="#ffffff" strokeWidth={2} />
+                  <Text style={[styles.statText, { color: '#ffffff', opacity: 0.9 }]}>{downloadedTracks.length} offline</Text>
+                </View>
               </View>
             )}
+          </LinearGradient>
+        </Animated.View>
 
-            {/* Download Button */}
-            <View style={styles.nowPlayingDownloadButton}>
-              <DownloadButton
-                isDownloaded={isTrackDownloaded(currentTrack.id)}
-                isDownloading={!!downloadProgress[currentTrack.id]?.isDownloading}
-                progress={downloadProgress[currentTrack.id]?.progress || 0}
-                onDownload={() => handleDownload(currentTrack)}
-                onDelete={() => handleDeleteDownload(currentTrack.id)}
-                size="large"
-                disabled={currentTrack.isPremium && !isPremium}
-              />
+        {/* Offline Indicator */}
+        <OfflineIndicator
+          downloadedCount={downloadedTracks.length}
+          totalSize={formatFileSize(getTotalDownloadSize())}
+          isVisible={downloadedTracks.length > 0}
+        />
+
+        {/* Download Manager */}
+        {showDownloadManager && downloadedTracks.length > 0 && (
+          <Animated.View 
+            style={styles.downloadManager}
+            entering={FadeInDown.delay(200).springify()}
+          >
+            <View style={styles.downloadManagerHeader}>
+              <Text style={styles.downloadManagerTitle}>Downloaded Tracks</Text>
+              <TouchableOpacity 
+                style={styles.clearAllButton}
+                onPress={handleClearAllDownloads}
+              >
+                <Trash2 size={16} color={colors.error} strokeWidth={2} />
+                <Text style={styles.clearAllText}>Clear All</Text>
+              </TouchableOpacity>
             </View>
-            
-            <View style={styles.nowPlayingContent}>
-              <View style={styles.nowPlayingInfo}>
-                <Text style={styles.nowPlayingTitle}>{currentTrack.title}</Text>
-                <Text style={styles.nowPlayingArtist}>{currentTrack.artist}</Text>
-                <Text style={styles.nowPlayingDescription}>{currentTrack.description}</Text>
-              </View>
-
-              {/* Progress Bar */}
-              <View style={styles.progressContainer}>
-                <View style={styles.progressBar}>
-                  <View style={[styles.progressFill, { width: `${getProgressPercentage()}%` }]} />
-                </View>
-                <View style={styles.timeContainer}>
-                  <Text style={styles.timeText}>
-                    {audioPlayer.formatTime(audioPlayer.position)}
-                  </Text>
-                  <Text style={styles.timeText}>
-                    {currentTrack.duration === 'Loops' ? 'Loops' : audioPlayer.formatTime(audioPlayer.duration)}
-                  </Text>
-                </View>
-              </View>
-
-              {/* Player Controls */}
-              <View style={styles.playerControls}>
-                <TouchableOpacity 
-                  style={styles.controlButton}
-                  onPress={() => audioPlayer.seekTo(Math.max(0, audioPlayer.position - 10000))}
-                >
-                  <SkipBack size={20} color="rgba(255,255,255,0.8)" strokeWidth={2} />
-                </TouchableOpacity>
-
-                <TouchableOpacity 
-                  style={styles.playButton} 
-                  onPress={() => handleTrackSelect(currentTrack)}
-                >
-                  <LinearGradient
-                    colors={['rgba(255,255,255,0.9)', 'rgba(255,255,255,0.7)']}
-                    style={styles.playButtonGradient}
-                  >
-                    {audioPlayer.isPlaying && audioPlayer.currentSoundId === currentTrack.id ? (
-                      <Pause size={32} color="#8b5cf6" strokeWidth={2.5} />
-                    ) : (
-                      <Play size={32} color="#8b5cf6" strokeWidth={2.5} />
-                    )}
-                  </LinearGradient>
-                </TouchableOpacity>
-
-                <TouchableOpacity 
-                  style={styles.controlButton}
-                  onPress={() => audioPlayer.seekTo(Math.min(audioPlayer.duration, audioPlayer.position + 10000))}
-                >
-                  <SkipForward size={20} color="rgba(255,255,255,0.8)" strokeWidth={2} />
-                </TouchableOpacity>
-              </View>
-
-              {/* Volume Control */}
-              <View style={styles.volumeContainer}>
-                <TouchableOpacity onPress={() => audioPlayer.setVolume(0)}>
-                  <VolumeX size={20} color="rgba(255,255,255,0.8)" strokeWidth={2} />
-                </TouchableOpacity>
-                <View style={styles.volumeSlider}>
-                  <View style={[styles.volumeFill, { width: `${audioPlayer.volume * 100}%` }]} />
-                </View>
-                <TouchableOpacity onPress={() => audioPlayer.setVolume(1)}>
-                  <Volume2 size={20} color="rgba(255,255,255,0.8)" strokeWidth={2} />
-                </TouchableOpacity>
-              </View>
-            </View>
+            <Text style={styles.downloadManagerSubtitle}>
+              {downloadedTracks.length} tracks • {formatFileSize(getTotalDownloadSize())}
+            </Text>
           </Animated.View>
         )}
 
-        {/* Category Filter */}
-        <Animated.View 
-          style={styles.categoriesSection}
-          entering={FadeInDown.delay(300).springify()}
-        >
-          <Text style={styles.sectionTitle}>Categories</Text>
-          <ScrollView 
-            horizontal 
-            showsHorizontalScrollIndicator={false}
-            style={styles.categoriesScroll}
-            contentContainerStyle={styles.categoriesContent}
-          >
-            {categories.map((category) => {
-              const IconComponent = category.icon;
-              const isLocked = category.isPremium && !isPremium;
-              const isDownloadedCategory = category.id === 'downloaded';
-              const downloadedCount = isDownloadedCategory ? downloadedTracks.length : 0;
-              
-              return (
-                <TouchableOpacity
-                  key={category.id}
-                  style={[
-                    styles.categoryButton,
-                    selectedCategory === category.id && styles.categoryButtonActive,
-                    isLocked && styles.categoryButtonLocked
-                  ]}
-                  onPress={() => handleCategorySelect(category.id)}
-                >
-                  {isLocked ? (
-                    <Crown size={16} color={colors.textSecondary} strokeWidth={2} />
-                  ) : (
-                    <IconComponent 
-                      size={18} 
-                      color={selectedCategory === category.id ? '#ffffff' : colors.textSecondary} 
-                      strokeWidth={2} 
-                    />
-                  )}
-                  <Text style={[
-                    styles.categoryText,
-                    selectedCategory === category.id && styles.categoryTextActive,
-                    isLocked && styles.categoryTextLocked
-                  ]}>
-                    {category.name}
-                    {isDownloadedCategory && downloadedCount > 0 && ` (${downloadedCount})`}
-                  </Text>
-                  {category.isPremium && (
-                    <View style={styles.categoryPremiumBadge}>
-                      <Crown size={12} color="#FFD700" strokeWidth={2} />
-                    </View>
-                  )}
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        </Animated.View>
-
-        {/* Track List */}
-        <View style={styles.trackListSection}>
-          <Text style={styles.sectionTitle}>
-            {getCategoryDisplayName(selectedCategory)}
-          </Text>
-          
-          {filteredTracks.length === 0 && selectedCategory === 'downloaded' && (
-            <View style={styles.emptyState}>
-              <Download size={48} color={colors.textTertiary} strokeWidth={1.5} />
-              <Text style={styles.emptyStateTitle}>No Downloaded Tracks</Text>
-              <Text style={styles.emptyStateSubtitle}>
-                Download tracks to listen offline during your flights
-              </Text>
-            </View>
-          )}
-          
-          {filteredTracks.map((track, index) => (
-            <Animated.View
-              key={track.id}
-              entering={FadeInDown.delay(400 + index * 100).springify()}
+        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+          {/* Now Playing Card */}
+          {currentTrack && (
+            <Animated.View 
+              style={styles.nowPlayingCard}
+              entering={FadeIn.delay(200)}
             >
-              <TouchableOpacity
-                style={[
-                  styles.trackItem,
-                  currentTrack?.id === track.id && styles.trackItemActive,
-                  track.isPremium && !isPremium && styles.trackItemLocked
-                ]}
-                onPress={() => handleTrackSelect(track)}
-              >
-                <View style={styles.trackImageContainer}>
-                  <Image 
-                    source={getImageSource(track)}
-                    style={styles.trackImage}
-                    onError={() => handleImageError(track.id)}
-                    resizeMode="cover"
-                  />
-                  {track.isPremium && !isPremium && (
-                    <View style={styles.trackImageOverlay}>
-                      <Lock size={20} color="#ffffff" strokeWidth={2.5} />
-                    </View>
-                  )}
+              <Image 
+                source={getImageSource(currentTrack)}
+                style={styles.nowPlayingImage}
+                onError={() => handleImageError(currentTrack.id)}
+                resizeMode="cover"
+              />
+              <LinearGradient
+                colors={['transparent', 'rgba(0,0,0,0.8)']}
+                style={styles.nowPlayingOverlay}
+              />
+              
+              {/* Premium Badge for Premium Tracks */}
+              {currentTrack.isPremium && (
+                <View style={styles.nowPlayingPremiumBadge}>
+                  <PremiumBadge size="small" />
                 </View>
-                
-                <View style={styles.trackInfo}>
-                  <View style={styles.trackTitleRow}>
-                    <Text style={[
-                      styles.trackTitle,
-                      currentTrack?.id === track.id && styles.trackTitleActive,
-                      track.isPremium && !isPremium && styles.trackTitleLocked
-                    ]}>
-                      {track.title}
+              )}
+
+              {/* Download Button */}
+              <View style={styles.nowPlayingDownloadButton}>
+                <DownloadButton
+                  isDownloaded={isTrackDownloaded(currentTrack.id)}
+                  isDownloading={!!downloadProgress[currentTrack.id]?.isDownloading}
+                  progress={downloadProgress[currentTrack.id]?.progress || 0}
+                  onDownload={() => handleDownload(currentTrack)}
+                  onDelete={() => handleDeleteDownload(currentTrack.id)}
+                  size="large"
+                  disabled={currentTrack.isPremium && !isPremium}
+                />
+              </View>
+              
+              <View style={styles.nowPlayingContent}>
+                <View style={styles.nowPlayingInfo}>
+                  <Text style={styles.nowPlayingTitle}>{currentTrack.title}</Text>
+                  <Text style={styles.nowPlayingArtist}>{currentTrack.artist}</Text>
+                  <Text style={styles.nowPlayingDescription}>{currentTrack.description}</Text>
+                </View>
+
+                {/* Progress Bar */}
+                <View style={styles.progressContainer}>
+                  <View style={styles.progressBar}>
+                    <View style={[styles.progressFill, { width: `${getProgressPercentage()}%` }]} />
+                  </View>
+                  <View style={styles.timeContainer}>
+                    <Text style={styles.timeText}>
+                      {audioPlayer.formatTime(audioPlayer.position)}
                     </Text>
-                    {track.isPremium && (
-                      <View style={styles.trackPremiumBadge}>
-                        <PremiumBadge size="small" />
-                      </View>
-                    )}
+                    <Text style={styles.timeText}>
+                      {currentTrack.duration === 'Loops' ? 'Loops' : audioPlayer.formatTime(audioPlayer.duration)}
+                    </Text>
                   </View>
-                  <Text style={[
-                    styles.trackArtist,
-                    track.isPremium && !isPremium && styles.trackArtistLocked
-                  ]}>
-                    {track.artist}
-                  </Text>
-                  <Text style={[
-                    styles.trackDescription,
-                    track.isPremium && !isPremium && styles.trackDescriptionLocked
-                  ]} numberOfLines={1}>
-                    {track.isPremium && !isPremium ? 'Unlock with Premium' : track.description}
-                  </Text>
                 </View>
 
-                <View style={styles.trackMeta}>
-                  <Text style={[
-                    styles.trackDuration,
-                    track.isPremium && !isPremium && styles.trackDurationLocked
-                  ]}>
-                    {track.duration}
-                  </Text>
-                  
-                  <View style={styles.trackActions}>
-                    {/* Download Button */}
-                    <DownloadButton
-                      isDownloaded={isTrackDownloaded(track.id)}
-                      isDownloading={!!downloadProgress[track.id]?.isDownloading}
-                      progress={downloadProgress[track.id]?.progress || 0}
-                      onDownload={() => handleDownload(track)}
-                      onDelete={() => handleDeleteDownload(track.id)}
-                      size="small"
-                      disabled={track.isPremium && !isPremium}
-                    />
-                    
-                    {/* Playing Indicator */}
-                    {currentTrack?.id === track.id && audioPlayer.isPlaying && audioPlayer.currentSoundId === track.id && (
-                      <View style={styles.playingIndicator}>
-                        <View style={[styles.playingBar, styles.playingBar1]} />
-                        <View style={[styles.playingBar, styles.playingBar2]} />
-                        <View style={[styles.playingBar, styles.playingBar3]} />
-                      </View>
-                    )}
-                  </View>
+                {/* Player Controls */}
+                <View style={styles.playerControls}>
+                  <TouchableOpacity 
+                    style={styles.controlButton}
+                    onPress={() => audioPlayer.seekTo(Math.max(0, audioPlayer.position - 10000))}
+                  >
+                    <SkipBack size={20} color="rgba(255,255,255,0.8)" strokeWidth={2} />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity 
+                    style={styles.playButton} 
+                    onPress={() => handleTrackSelect(currentTrack)}
+                  >
+                    <LinearGradient
+                      colors={['rgba(255,255,255,0.9)', 'rgba(255,255,255,0.7)']}
+                      style={styles.playButtonGradient}
+                    >
+                      {audioPlayer.isPlaying && audioPlayer.currentSoundId === currentTrack.id ? (
+                        <Pause size={32} color="#8b5cf6" strokeWidth={2.5} />
+                      ) : (
+                        <Play size={32} color="#8b5cf6" strokeWidth={2.5} />
+                      )}
+                    </LinearGradient>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity 
+                    style={styles.controlButton}
+                    onPress={() => audioPlayer.seekTo(Math.min(audioPlayer.duration, audioPlayer.position + 10000))}
+                  >
+                    <SkipForward size={20} color="rgba(255,255,255,0.8)" strokeWidth={2} />
+                  </TouchableOpacity>
                 </View>
-              </TouchableOpacity>
+
+                {/* Volume Control */}
+                <View style={styles.volumeContainer}>
+                  <TouchableOpacity onPress={() => audioPlayer.setVolume(0)}>
+                    <VolumeX size={20} color="rgba(255,255,255,0.8)" strokeWidth={2} />
+                  </TouchableOpacity>
+                  <Pressable 
+                    style={styles.volumeSlider}
+                    onLayout={(event: LayoutChangeEvent) => {
+                      const { width } = event.nativeEvent.layout;
+                      volumeSliderWidth.current = width;
+                    }}
+                    onTouchStart={(event: GestureResponderEvent) => {
+                      const { locationX } = event.nativeEvent;
+                      const newVolume = Math.max(0, Math.min(1, locationX / volumeSliderWidth.current));
+                      audioPlayer.setVolume(newVolume);
+                    }}
+                    onTouchMove={(event: GestureResponderEvent) => {
+                      const { locationX } = event.nativeEvent;
+                      const newVolume = Math.max(0, Math.min(1, locationX / volumeSliderWidth.current));
+                      audioPlayer.setVolume(newVolume);
+                    }}
+                  >
+                    <View style={styles.volumeBackground} />
+                    <View style={[styles.volumeFill, { width: `${audioPlayer.volume * 100}%` }]} />
+                  </Pressable>
+                  <TouchableOpacity onPress={() => audioPlayer.setVolume(1)}>
+                    <Volume2 size={20} color="rgba(255,255,255,0.8)" strokeWidth={2} />
+                  </TouchableOpacity>
+                </View>
+              </View>
             </Animated.View>
-          ))}
-        </View>
+          )}
 
-        {/* Bottom Spacing */}
-        <View style={styles.bottomSpacing} />
-      </ScrollView>
-    </SafeAreaView>
+          {/* Category Filter */}
+          <Animated.View 
+            style={styles.categoriesSection}
+            entering={FadeInDown.delay(300).springify()}
+          >
+            <Text style={styles.sectionTitle}>Categories</Text>
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              style={styles.categoriesScroll}
+              contentContainerStyle={styles.categoriesContent}
+            >
+              {categories.map((category) => {
+                const IconComponent = category.icon;
+                const isLocked = category.isPremium && !isPremium;
+                const isDownloadedCategory = category.id === 'downloaded';
+                const downloadedCount = isDownloadedCategory ? downloadedTracks.length : 0;
+                
+                return (
+                  <TouchableOpacity
+                    key={category.id}
+                    style={[
+                      styles.categoryButton,
+                      selectedCategory === category.id && styles.categoryButtonActive,
+                      isLocked && styles.categoryButtonLocked
+                    ]}
+                    onPress={() => handleCategorySelect(category.id)}
+                  >
+                    {isLocked ? (
+                      <Crown size={16} color={colors.textSecondary} strokeWidth={2} />
+                    ) : (
+                      <IconComponent 
+                        size={18} 
+                        color={selectedCategory === category.id ? '#ffffff' : colors.textSecondary} 
+                        strokeWidth={2} 
+                      />
+                    )}
+                    <Text style={[
+                      styles.categoryText,
+                      selectedCategory === category.id && styles.categoryTextActive,
+                      isLocked && styles.categoryTextLocked
+                    ]}>
+                      {category.name}
+                      {isDownloadedCategory && downloadedCount > 0 && ` (${downloadedCount})`}
+                    </Text>
+                    {category.isPremium && (
+                      <View style={styles.categoryPremiumBadge}>
+                        <Crown size={12} color="#FFD700" strokeWidth={2} />
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </Animated.View>
+
+          {/* Track List */}
+          <View style={styles.trackListSection}>
+            <Text style={styles.sectionTitle}>
+              {getCategoryDisplayName(selectedCategory)}
+            </Text>
+            
+            {filteredTracks.length === 0 && selectedCategory === 'downloaded' && (
+              <View style={styles.emptyState}>
+                <Download size={48} color={colors.textSecondary} strokeWidth={1.5} />
+                <Text style={styles.emptyStateTitle}>No Downloaded Tracks</Text>
+                <Text style={styles.emptyStateSubtitle}>
+                  Download tracks to listen offline during your flights
+                </Text>
+              </View>
+            )}
+            
+            {filteredTracks.map((track, index) => (
+              <Animated.View
+                key={track.id}
+                entering={FadeInDown.delay(400 + index * 100).springify()}
+              >
+                <TouchableOpacity
+                  style={[
+                    styles.trackItem,
+                    currentTrack?.id === track.id && styles.trackItemActive,
+                    track.isPremium && !isPremium && styles.trackItemLocked
+                  ]}
+                  onPress={() => handleTrackSelect(track)}
+                >
+                  <View style={styles.trackImageContainer}>
+                    <Image 
+                      source={getImageSource(track)}
+                      style={styles.trackImage}
+                      onError={() => handleImageError(track.id)}
+                      resizeMode="cover"
+                    />
+                    {track.isPremium && !isPremium && (
+                      <View style={styles.trackImageOverlay}>
+                        <Lock size={20} color="#ffffff" strokeWidth={2.5} />
+                      </View>
+                    )}
+                  </View>
+                  
+                  <View style={styles.trackInfo}>
+                    <View style={styles.trackTitleRow}>
+                      <Text style={[
+                        styles.trackTitle,
+                        currentTrack?.id === track.id && styles.trackTitleActive,
+                        track.isPremium && !isPremium && styles.trackTitleLocked
+                      ]}>
+                        {track.title}
+                      </Text>
+                      {track.isPremium && (
+                        <View style={styles.trackPremiumBadge}>
+                          <PremiumBadge size="small" />
+                        </View>
+                      )}
+                    </View>
+                    <Text style={[
+                      styles.trackArtist,
+                      track.isPremium && !isPremium && styles.trackArtistLocked
+                    ]}>
+                      {track.artist}
+                    </Text>
+                    <Text style={[
+                      styles.trackDescription,
+                      track.isPremium && !isPremium && styles.trackDescriptionLocked
+                    ]} numberOfLines={1}>
+                      {track.isPremium && !isPremium ? 'Unlock with Premium' : track.description}
+                    </Text>
+                  </View>
+
+                  <View style={styles.trackMeta}>
+                    <Text style={[
+                      styles.trackDuration,
+                      track.isPremium && !isPremium && styles.trackDurationLocked
+                    ]}>
+                      {track.duration}
+                    </Text>
+                    
+                    <View style={styles.trackActions}>
+                      {/* Download Button */}
+                      <DownloadButton
+                        isDownloaded={isTrackDownloaded(track.id)}
+                        isDownloading={!!downloadProgress[track.id]?.isDownloading}
+                        progress={downloadProgress[track.id]?.progress || 0}
+                        onDownload={() => handleDownload(track)}
+                        onDelete={() => handleDeleteDownload(track.id)}
+                        size="small"
+                        disabled={track.isPremium && !isPremium}
+                      />
+                      
+                      {/* Playing Indicator */}
+                      {currentTrack?.id === track.id && audioPlayer.isPlaying && audioPlayer.currentSoundId === track.id && (
+                        <View style={styles.playingIndicator}>
+                          <View style={[styles.playingBar, styles.playingBar1]} />
+                          <View style={[styles.playingBar, styles.playingBar2]} />
+                          <View style={[styles.playingBar, styles.playingBar3]} />
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              </Animated.View>
+            ))}
+          </View>
+
+          {/* Bottom Spacing */}
+          <View style={styles.bottomSpacing} />
+        </ScrollView>
+      </SafeAreaView>
+    </View>
   );
 }
 
@@ -1006,9 +995,16 @@ const createStyles = (colors: any) => StyleSheet.create({
     paddingVertical: 32,
     borderBottomLeftRadius: 32,
     borderBottomRightRadius: 32,
+    backgroundColor: colors.card,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
   headerContent: {
     marginBottom: 20,
+    marginTop: 10,
   },
   headerTop: {
     flexDirection: 'row',
@@ -1021,14 +1017,18 @@ const createStyles = (colors: any) => StyleSheet.create({
   title: {
     fontFamily: 'Inter-SemiBold',
     fontSize: 28,
-    color: '#ffffff',
     marginBottom: 8,
+    textShadowColor: 'rgba(0, 0, 0, 0.2)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   subtitle: {
     fontFamily: 'Inter-Regular',
     fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.9)',
     lineHeight: 22,
+    textShadowColor: 'rgba(0, 0, 0, 0.2)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   downloadManagerButton: {
     width: 44,
@@ -1116,6 +1116,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     overflow: 'hidden',
     marginBottom: 32,
     position: 'relative',
+    backgroundColor: colors.card,
     ...Platform.select({
       ios: {
         shadowColor: colors.shadow,
@@ -1243,12 +1244,19 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   volumeSlider: {
     flex: 1,
+    height: 30,  // Increased touch target
+    justifyContent: 'center',  // Center the fill bar vertically
+  },
+  volumeBackground: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
     height: 4,
     backgroundColor: 'rgba(255, 255, 255, 0.3)',
     borderRadius: 2,
   },
   volumeFill: {
-    height: '100%',
+    height: 4,
     backgroundColor: '#ffffff',
     borderRadius: 2,
   },

@@ -91,6 +91,11 @@ export function useAuth() {
           user,
           isLoading: false,
         });
+
+        // Sync user data to offline storage when auth state changes
+        if (user) {
+          await syncUserDataToOffline(user);
+        }
       }
     });
 
@@ -99,6 +104,36 @@ export function useAuth() {
 
     return unsubscribe;
   }, []);
+
+  const syncUserDataToOffline = async (user: User) => {
+    try {
+      const offlineUserData = {
+        uid: user.uid,
+        email: user.email || '',
+        displayName: user.displayName,
+        photoURL: user.photoURL,
+        emailVerified: user.emailVerified,
+        lastSignInTime: user.metadata.lastSignInTime || new Date().toISOString(),
+        createdAt: user.metadata.creationTime || new Date().toISOString(),
+      };
+
+      await AsyncStorage.setItem('offline_user_data', JSON.stringify(offlineUserData));
+      await AsyncStorage.setItem('offline_auth_last_sync', new Date().toISOString());
+
+      // Try to fetch and cache user profile
+      try {
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        if (userDoc.exists()) {
+          const profileData = userDoc.data();
+          await AsyncStorage.setItem('offline_user_profile', JSON.stringify(profileData));
+        }
+      } catch (profileError) {
+        console.warn('Could not sync user profile:', profileError);
+      }
+    } catch (error) {
+      console.error('Error syncing user data to offline:', error);
+    }
+  };
 
   const checkMagicLinkSignIn = async () => {
     try {
@@ -266,12 +301,21 @@ export function useAuth() {
         throw new Error("No identityToken received from Apple.");
       }
     } catch (e: any) {
+      console.error("Apple Sign-In Error Details:", {
+        code: e.code,
+        message: e.message,
+        error: e
+      });
+      
       if (e.code === "ERR_REQUEST_CANCELED") {
-        console.log("Apple Sign-In canceled by user.");
         return { success: false, error: "Sign-in was canceled" };
+      } else if (e.code === "ERR_REQUEST_UNKNOWN") {
+        return { 
+          success: false, 
+          error: "Apple Sign-In failed. Please ensure you're testing on a real device and your Apple ID is properly configured." 
+        };
       } else {
-        console.error("Apple Sign-In Error:", e);
-        return { success: false, error: e.message };
+        return { success: false, error: e.message || "Apple Sign-In failed" };
       }
     }
   };

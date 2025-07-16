@@ -1,48 +1,128 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { Crown } from 'lucide-react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Crown } from 'lucide-react-native';
+import { useTheme } from '@/components/ThemeProvider';
 
 interface Props {
+  onPress?: () => void;
   size?: 'small' | 'medium' | 'large';
+  showCrown?: boolean;
+  label?: string;
+  style?: any;
 }
 
-export default function PremiumBadge({ size = 'medium' }: Props) {
+export default function PremiumBadge({ 
+  onPress, 
+  size = 'medium', 
+  showCrown = true,
+  label = 'Premium',
+  style 
+}: Props) {
+  const { colors } = useTheme();
+
   const getSize = () => {
     switch (size) {
       case 'small':
-        return { iconSize: 12, fontSize: 10, padding: 6 };
+        return {
+          height: 24,
+          fontSize: 10,
+          iconSize: 12,
+          paddingHorizontal: 8,
+        };
       case 'large':
-        return { iconSize: 20, fontSize: 14, padding: 12 };
-      default:
-        return { iconSize: 16, fontSize: 12, padding: 8 };
+        return {
+          height: 40,
+          fontSize: 16,
+          iconSize: 20,
+          paddingHorizontal: 16,
+        };
+      default: // medium
+        return {
+          height: 32,
+          fontSize: 13,
+          iconSize: 16,
+          paddingHorizontal: 12,
+        };
     }
   };
 
-  const { iconSize, fontSize, padding } = getSize();
+  const sizeConfig = getSize();
+  const styles = createStyles(colors, sizeConfig);
 
-  return (
+  const Badge = () => (
     <LinearGradient
-      colors={['#FFD700', '#FFA500']}
-      style={[styles.badge, { padding }]}
+      colors={['#FFD700', '#FFA500', '#FF6B35']}
+      style={[styles.badge, style]}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
     >
-      <Crown size={iconSize} color="#ffffff" strokeWidth={2.5} />
-      <Text style={[styles.text, { fontSize }]}>Premium</Text>
+      {showCrown && (
+        <Crown 
+          size={sizeConfig.iconSize} 
+          color="#ffffff" 
+          strokeWidth={2.5} 
+          style={styles.icon}
+        />
+      )}
+      <Text style={styles.text}>{label}</Text>
     </LinearGradient>
   );
+
+  if (onPress) {
+    return (
+      <TouchableOpacity onPress={onPress} style={styles.touchable}>
+        <Badge />
+      </TouchableOpacity>
+    );
+  }
+
+  return <Badge />;
 }
 
-const styles = StyleSheet.create({
-  badge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 12,
-    gap: 4,
-  },
-  text: {
-    fontFamily: 'Inter-SemiBold',
-    color: '#ffffff',
-  },
-});
+const createStyles = (colors: any, size: { 
+  height: number; 
+  paddingHorizontal: number;
+  fontSize: number;
+  iconSize: number;
+}) => 
+  StyleSheet.create({
+    touchable: {
+      borderRadius: size.height / 2,
+      overflow: 'hidden',
+      backgroundColor: '#FFD700', // Add solid background color for shadow calculation
+      ...Platform.select({
+        ios: {
+          shadowColor: '#FFD700',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.3,
+          shadowRadius: 4,
+        },
+        android: {
+          elevation: 4,
+        },
+        web: {
+          shadowColor: '#FFD700',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.3,
+          shadowRadius: 4,
+        },
+      }),
+    },
+    badge: {
+      height: size.height,
+      paddingHorizontal: size.paddingHorizontal,
+      borderRadius: size.height / 2,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    icon: {
+      marginRight: 4,
+    },
+    text: {
+      fontFamily: 'Inter-SemiBold',
+      fontSize: size.fontSize,
+      color: '#ffffff',
+    },
+  });

@@ -7,7 +7,7 @@ import { useTheme } from '@/components/ThemeProvider';
 import { router, useNavigation, useFocusEffect } from 'expo-router';
 import { BackgroundSound, backgroundSounds } from '@/constants/BackgroundSounds';
 import { useAudioPlayer } from '@/hooks/useAudioPlayer';
-import { usePremium } from '@/hooks/usePremium';
+import { usePremium } from '@/context/premiumContext';
 import BackgroundSoundSelector from '@/components/breathing/BackgroundSoundSelector';
 import PremiumModal from '@/components/premium/PremiumModal';
 import Animated, { FadeIn, FadeInDown, FadeInUp } from 'react-native-reanimated';
@@ -121,7 +121,7 @@ const alternateSlides = [
 
 export default function SOSScreen() {
   const { colors } = useTheme();
-  const { isPremium, simulatePremiumPurchase, restorePurchases } = usePremium();
+  const { isPremium, purchasePlan, restorePurchases } = usePremium();
   const audioPlayer = useAudioPlayer();
   const [showWelcome, setShowWelcome] = useState(true);
   const [showSlides, setShowSlides] = useState(false);
@@ -214,11 +214,13 @@ export default function SOSScreen() {
     audioPlayer.setVolume(volume);
   };
 
-  const handlePremiumPurchase = async () => {
+  const handlePremiumPurchase = async (planId: 'monthly' | 'annual') => {
     setIsProcessing(true);
     try {
-      await simulatePremiumPurchase();
-      setShowPremiumModal(false);
+      const success = await purchasePlan(planId);
+      if (success) {
+        setShowPremiumModal(false);
+      }
     } catch (error) {
       console.error('Error purchasing premium:', error);
     } finally {
@@ -545,7 +547,6 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   statusSection: {
     flex: 1,
-    justifyContent: 'center',
   },
   statusQuestion: {
     fontFamily: 'Inter-SemiBold',
@@ -568,6 +569,7 @@ const createStyles = (colors: any) => StyleSheet.create({
   emergencyButton: {
     borderRadius: 20,
     overflow: 'hidden',
+    backgroundColor: '#ef4444', // Add solid background color for shadow calculation
     ...Platform.select({
       ios: {
         shadowColor: '#ef4444',
@@ -608,15 +610,18 @@ const createStyles = (colors: any) => StyleSheet.create({
     fontSize: 18,
     color: '#ffffff',
     marginBottom: 4,
+    textAlign: 'center',
   },
   buttonSubtitle: {
     fontFamily: 'Inter-Regular',
     fontSize: 14,
     color: 'rgba(255, 255, 255, 0.8)',
+    textAlign: 'center',
   },
   calmButton: {
     borderRadius: 20,
     overflow: 'hidden',
+    backgroundColor: '#10b981', // Add solid background color for shadow calculation
     ...Platform.select({
       ios: {
         shadowColor: '#10b981',
@@ -654,11 +659,13 @@ const createStyles = (colors: any) => StyleSheet.create({
     fontSize: 18,
     color: '#ffffff',
     marginBottom: 4,
+    textAlign: 'center',
   },
   calmButtonSubtitle: {
     fontFamily: 'Inter-Regular',
     fontSize: 14,
     color: 'rgba(255, 255, 255, 0.8)',
+    textAlign: 'center',
   },
   header: {
     padding: 16,
@@ -711,17 +718,20 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   currentSoundInfo: {
     flex: 1,
+    alignItems: 'center',
   },
   currentSoundName: {
     fontFamily: 'Inter-SemiBold',
     fontSize: 14,
     color: colors.text,
     marginBottom: 2,
+    textAlign: 'center',
   },
   currentSoundVolume: {
     fontFamily: 'Inter-Regular',
     fontSize: 12,
     color: colors.textSecondary,
+    textAlign: 'center',
   },
   soundPlayingIndicator: {
     flexDirection: 'row',
@@ -803,6 +813,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
     fontSize: 18,
     color: '#ffffff',
+    textAlign: 'center',
   },
   finalButtons: {
     width: '100%',
@@ -839,6 +850,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
     fontSize: 16,
     color: '#ffffff',
+    textAlign: 'center',
   },
   breatheButton: {
     borderRadius: 16,
@@ -870,6 +882,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
     fontSize: 16,
     color: '#ffffff',
+    textAlign: 'center',
   },
   progressContainer: {
     paddingVertical: 20,

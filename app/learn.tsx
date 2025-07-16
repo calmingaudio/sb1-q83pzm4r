@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Search, Filter, BookOpen, TrendingUp } from 'lucide-react-native';
+import { Search, Filter, BookOpen, TrendingUp } from 'lucide-react-native';
+import BackButton from '@/components/BackButton';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/components/ThemeProvider';
 import { faqCategories } from '@/constants/LearnContent';
@@ -67,7 +68,7 @@ export default function LearnScreen() {
   const styles = createStyles(colors);
   
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={["left", "right", "bottom"]}>
       {/* Modern Header */}
       <Animated.View 
         style={styles.header}
@@ -82,12 +83,7 @@ export default function LearnScreen() {
           <View style={styles.headerContent}>
             {selectedCategory ? (
               <View style={styles.categoryHeaderContent}>
-                <TouchableOpacity 
-                  style={styles.backButton}
-                  onPress={handleBackPress}
-                >
-                  <ArrowLeft size={24} color="#ffffff" strokeWidth={2.5} />
-                </TouchableOpacity>
+                <BackButton color="#ffffff" onPress={handleBackPress} />
                 <View style={styles.categoryTitleContainer}>
                   <Text style={styles.categoryTitle}>{selectedCategory.title}</Text>
                   <Text style={styles.categorySubtitle}>{selectedCategory.description}</Text>
@@ -95,6 +91,7 @@ export default function LearnScreen() {
               </View>
             ) : (
               <View style={styles.mainHeaderContent}>
+                <BackButton color="#ffffff" />
                 <View style={styles.titleSection}>
                   <Text style={styles.title}>Learn & Explore</Text>
                   <Text style={styles.subtitle}>Understanding flight reduces anxiety</Text>
@@ -279,7 +276,9 @@ const createStyles = (colors: any) => StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.8)',
   },
   mainHeaderContent: {
-    gap: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
   },
   titleSection: {
     marginBottom: 4,
@@ -307,6 +306,7 @@ const createStyles = (colors: any) => StyleSheet.create({
   didYouKnowCard: {
     borderRadius: 20,
     padding: 24,
+    backgroundColor: colors.card, // Add solid background color for shadow calculation
     ...Platform.select({
       ios: {
         shadowColor: colors.accent,

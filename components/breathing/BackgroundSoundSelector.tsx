@@ -4,7 +4,7 @@ import { Volume2, VolumeX, Crown, Lock } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/components/ThemeProvider';
 import { backgroundSounds, BackgroundSound } from '@/constants/BackgroundSounds';
-import { usePremium } from '@/hooks/usePremium';
+import { usePremium } from '@/context/premiumContext';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 interface Props {

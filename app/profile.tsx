@@ -19,9 +19,9 @@ import {
   CircleHelp,
   ArrowRight,
   LogOut,
-  ChevronLeft,
   Trash2,
 } from "lucide-react-native";
+import BackButton from "@/components/BackButton";
 import Colors from "@/constants/Colors";
 import { useAuth } from "@/context/authContext";
 import { router } from "expo-router";
@@ -75,12 +75,7 @@ export default function ProfileScreen() {
     <SafeAreaView style={styles.container}>
       {/* New Custom Header */}
       <View style={styles.screenHeader}>
-        <TouchableOpacity
-          onPress={() => router.back()}
-          style={styles.backButton}
-        >
-          <ChevronLeft size={24} color={Colors.light.text} />
-        </TouchableOpacity>
+        <BackButton />
         <Text style={styles.screenHeaderTitle}>Settings</Text>
         {/* This empty view is a trick to center the title perfectly */}
         <View style={styles.headerRightPlaceholder} />
