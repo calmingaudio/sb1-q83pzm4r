@@ -20,6 +20,8 @@ interface OfflineUserData {
   emailVerified: boolean;
   lastSignInTime: string;
   createdAt: string;
+  isOfflineUser?: boolean;
+  pendingMagicLink?: boolean;
 }
 
 interface UserProfile {
@@ -39,10 +41,10 @@ interface OfflineAuthState {
   lastSyncDate: Date | null;
 }
 
-export function useOfflineAuth() {
+export function useOfflineAuth(onlineUser: User | null, isOnlineAuthLoading: boolean) {
   const isMounted = useRef(true);
   const [authState, setAuthState] = useState<OfflineAuthState>({
-    user: null,
+    user: onlineUser,
     offlineUser: null,
     profile: null,
     isOffline: false,
@@ -57,56 +59,61 @@ export function useOfflineAuth() {
   }, []);
 
   useEffect(() => {
-    initializeOfflineAuth();
-  }, []);
+    const handleAuthChange = async () => {
+      if (!isMounted.current) return;
 
-  const initializeOfflineAuth = async () => {
-    try {
-      // First, try to get online auth state
-      const auth = getFirebaseAuth();
-      const currentUser = auth.currentUser;
-      
-      if (currentUser) {
-        // User is authenticated online
-        await syncUserDataToOffline(currentUser);
-        setAuthState(prev => ({
-          ...prev,
-          user: currentUser,
+      if (isOnlineAuthLoading) {
+        setAuthState(prev => ({ ...prev, isLoading: true }));
+        return;
+      }
+
+      if (onlineUser) {
+        // User is online and authenticated
+        await syncUserDataToOffline(onlineUser);
+        const profile = await getOfflineProfile(onlineUser.uid);
+        setAuthState({
+          user: onlineUser,
+          offlineUser: null,
+          profile,
           isOffline: false,
           isLoading: false,
-        }));
+          lastSyncDate: new Date(),
+        });
       } else {
-        // Check for offline cached user
+        // User is not authenticated online, check for offline user
         const offlineUser = await getOfflineUser();
-        if (offlineUser) {
-          setAuthState(prev => ({
-            ...prev,
+        
+        // If we have an offline user but no pending magic link, it means we should stay authenticated offline
+        // If there's no offline user, or it's a temporary offline user, clear everything
+        if (offlineUser && !offlineUser.uid?.startsWith('offline-') && !offlineUser.uid?.startsWith('debug-')) {
+          const profile = await getOfflineProfile(offlineUser.uid);
+          setAuthState({
+            user: null,
             offlineUser,
+            profile,
             isOffline: true,
             isLoading: false,
-          }));
-          
-          // Try to get cached profile
-          const profile = await getOfflineProfile(offlineUser.uid);
-          if (profile) {
-            setAuthState(prev => ({ ...prev, profile }));
-          }
+            lastSyncDate: null,
+          });
         } else {
-          setAuthState(prev => ({ ...prev, isLoading: false }));
+          // No valid offline user, clear everything
+          console.log('No valid offline user found, clearing auth state');
+          setAuthState({
+            user: null,
+            offlineUser: null,
+            profile: null,
+            isOffline: false,
+            isLoading: false,
+            lastSyncDate: null,
+          });
         }
       }
-    } catch (error) {
-      console.error('Error initializing offline auth:', error);
-      // Fallback to offline mode
-      const offlineUser = await getOfflineUser();
-      setAuthState(prev => ({
-        ...prev,
-        offlineUser,
-        isOffline: true,
-        isLoading: false,
-      }));
-    }
-  };
+    };
+
+    handleAuthChange();
+  }, [onlineUser, isOnlineAuthLoading]);
+
+
 
   const syncUserDataToOffline = async (user: User) => {
     try {
@@ -179,23 +186,30 @@ export function useOfflineAuth() {
 
   const clearOfflineAuth = async () => {
     try {
+      console.log('Clearing offline auth data...');
       await AsyncStorage.multiRemove([
         OFFLINE_AUTH_KEYS.USER_DATA,
         OFFLINE_AUTH_KEYS.AUTH_TOKEN,
         OFFLINE_AUTH_KEYS.LAST_SYNC,
         OFFLINE_AUTH_KEYS.USER_PROFILE,
+        'pending_magic_link',
+        'pending_email',
+        'pending_name'
       ]);
       
+      // Force immediate state update
       if (isMounted.current) {
-        setAuthState(prev => ({
-          ...prev,
+        setAuthState({
           user: null,
           offlineUser: null,
           profile: null,
           isOffline: false,
+          isLoading: false,
           lastSyncDate: null,
-        }));
+        });
       }
+      
+      console.log('Offline auth data cleared successfully');
     } catch (error) {
       console.error('Error clearing offline auth:', error);
     }

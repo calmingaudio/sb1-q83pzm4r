@@ -14,6 +14,7 @@ import { OfflineProvider } from '@/components/OfflineProvider';
 import { AnalyticsProvider } from '@/components/AnalyticsProvider';
 import { ThemeProvider } from '@/components/ThemeProvider';
 import ConsentBanner from '@/components/ConsentBanner';
+import OfflineAuthBanner from '@/components/OfflineAuthBanner';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { KeyboardAvoidingView, Platform } from 'react-native';
 import { AuthProvider } from '@/context/authContext';
@@ -21,11 +22,13 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useOfflineContext } from '@/components/OfflineProvider';
 import { PremiumProvider, usePremium } from '@/context/premiumContext';
 import PremiumModal from '@/components/premium/PremiumModal';
+import OfflineAuthTester from '@/components/OfflineAuthTester';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 SplashScreen.preventAutoHideAsync();
 
 function AppNavigation() {
-  const { isAuthenticated, isLoading, isOfflineMode } = useOfflineContext();
+  const { isAuthenticated, isLoading } = useOfflineContext();
   const pathname = usePathname();
   const [isMounted, setIsMounted] = useState(false);
 
@@ -49,6 +52,7 @@ function AppNavigation() {
   }, []);
 
   useEffect(() => {
+    // Don't navigate if still loading or fonts aren't ready
     if (isLoading || (!fontsLoaded && !fontError) || !isMounted) {
       return;
     }
@@ -58,7 +62,13 @@ function AppNavigation() {
       const inAuthGroup = pathname.startsWith("/auth");
 
       if (isAuthenticated) {
-        if (inAuthGroup) {
+        // Define valid authenticated screens (including tab screens without the (tabs) prefix)
+        const validTabScreens = ['/home', '/breathe', '/sos', '/music', '/journal'];
+        const validScreens = ['/profile', '/learn', ...validTabScreens];
+        const isInValidScreen = pathname.startsWith("/(tabs)") || validScreens.includes(pathname);
+        
+        // If user is authenticated but not in the main app, navigate to main app
+        if (!isInValidScreen) {
           router.replace('/(tabs)');
         }
       } else {
@@ -66,7 +76,7 @@ function AppNavigation() {
           router.replace("/auth/welcome");
         }
       }
-    }, 100);
+    }, 150); // Slightly longer delay for stability
 
     return () => clearTimeout(timeout);
   }, [isAuthenticated, isLoading, pathname, fontsLoaded, fontError, isMounted]);
@@ -94,6 +104,8 @@ function AppNavigation() {
         }}
       />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen name="learn" options={{ headerShown: false }} />
+      <Stack.Screen name="profile" options={{ headerShown: false }} />
       <Stack.Screen name="+not-found" options={{ title: 'Oops!' }} />
     </Stack>
   );
@@ -104,35 +116,56 @@ function RootLayoutNav() {
     isPremiumModalVisible, 
     hidePremiumModal, 
     purchasePlan, 
+    startTrial,
     restorePurchases,
-    isLoading 
+    isLoading,
+    isTrialEligible
   } = usePremium();
 
   const handlePurchase = async (planId: 'monthly' | 'annual') => {
     const success = await purchasePlan(planId);
+    // Let the modal close itself; still return success for UI feedback
     if (success) {
-      hidePremiumModal();
+      // optional: leave banner/modal closing to child for consistency
+    }
+    return success;
+  };
+
+  const handleStartTrial = async (planId: 'monthly' | 'annual' = 'annual') => {
+    try {
+      const ok = await startTrial(planId);
+      return ok;
+    } catch (error) {
+      console.error('Error in handleStartTrial:', error);
+      return false;
     }
   };
 
   const handleRestore = async () => {
-    await restorePurchases();
-    // Assuming restorePurchases will show an alert on its own.
-    // You might want to hide the modal if restore is successful.
-    // This part depends on the logic inside restorePurchases.
+    try {
+      const success = await restorePurchases();
+      return success;
+    } catch (error) {
+      console.error('Error in handleRestore:', error);
+      return false;
+    }
   };
 
   return (
     <>
       <AppNavigation />
-      <StatusBar style="auto" />
+      <StatusBar style="dark" />
       <ConsentBanner />
+      <OfflineAuthBanner />
+      <OfflineAuthTester />
       <PremiumModal
         visible={isPremiumModalVisible}
         onClose={hidePremiumModal}
         onPurchase={handlePurchase}
+        onStartTrial={handleStartTrial}
         onRestore={handleRestore}
         isLoading={isLoading}
+        isTrialEligible={isTrialEligible}
       />
     </>
   );
@@ -140,27 +173,29 @@ function RootLayoutNav() {
 
 export default function RootLayout() {
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaProvider>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={{ flex: 1 }}
-        >
-          <ThemeProvider>
-            <AuthProvider>
-              <AnalyticsProvider>
-                <PremiumProvider>
-                  <OfflineProvider>
-                    <GamificationProvider>
-                      <RootLayoutNav />
-                    </GamificationProvider>
-                  </OfflineProvider>
-                </PremiumProvider>
-              </AnalyticsProvider>
-            </AuthProvider>
-          </ThemeProvider>
-        </KeyboardAvoidingView>
-      </SafeAreaProvider>
-    </GestureHandlerRootView>
+    <ErrorBoundary>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <SafeAreaProvider>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={{ flex: 1 }}
+          >
+            <ThemeProvider>
+              <AuthProvider>
+                <AnalyticsProvider>
+                  <PremiumProvider>
+                    <OfflineProvider>
+                      <GamificationProvider>
+                        <RootLayoutNav />
+                      </GamificationProvider>
+                    </OfflineProvider>
+                  </PremiumProvider>
+                </AnalyticsProvider>
+              </AuthProvider>
+            </ThemeProvider>
+          </KeyboardAvoidingView>
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
+    </ErrorBoundary>
   );
 }

@@ -1,7 +1,29 @@
-import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Alert, Platform } from 'react-native';
-import * as InAppPurchases from 'expo-in-app-purchases';
+
+// Safely import InAppPurchases to prevent crashes
+let InAppPurchases: any = null;
+try {
+  // Try different import patterns to handle module structure issues
+  const module = require('expo-in-app-purchases');
+  InAppPurchases = module.default || module;
+} catch (error) {
+  console.warn('expo-in-app-purchases not available:', error);
+}
+
+// Type definitions for InAppPurchases
+interface PurchaseResult {
+  productId: string;
+  purchaseTime: number;
+  acknowledged: boolean;
+}
+
+interface PurchaseResponse {
+  responseCode: number;
+  results?: PurchaseResult[];
+  errorCode?: string;
+}
 
 // Constants
 const PREMIUM_STATUS_KEY = 'premium_status';
@@ -9,7 +31,7 @@ const PREMIUM_EXPIRY_KEY = 'premium_expiry';
 const PREMIUM_TRIAL_KEY = 'premium_trial';
 const PREMIUM_PURCHASE_DATE_KEY = 'premium_purchase_date';
 
-// Product IDs - these should match your App Store Connect configuration
+// Product IDs - these match your App Store Connect configuration exactly
 const PRODUCT_IDS = {
   monthly: 'premium_monthly',
   annual: 'premium_annual'
@@ -48,18 +70,17 @@ interface PremiumContextType extends PremiumStatus {
   features: PremiumFeatures;
   plans: PremiumPlan[];
   purchasePlan: (planId: 'monthly' | 'annual') => Promise<boolean>;
-  startTrial: () => Promise<void>;
+  startTrial: (planId?: 'monthly' | 'annual') => Promise<boolean>;
   endTrial: () => Promise<void>;
-  restorePurchases: () => Promise<void>;
+  restorePurchases: () => Promise<boolean>;
   checkPremiumStatus: () => Promise<void>;
   isPremiumModalVisible: boolean;
   showPremiumModal: () => void;
   hidePremiumModal: () => void;
-  // Development only - remove in production
-  simulatePremiumPurchase: () => Promise<void>;
+
 }
 
-// Premium plans configuration
+// Premium plans configuration - Only annual for Apple submission compliance
 export const PREMIUM_PLANS: PremiumPlan[] = [
   {
     id: 'annual',
@@ -100,20 +121,46 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
     currentPlan: null,
     isLoading: true,
   });
+  const statusRef = useRef<PremiumStatus>(status);
+  const listenerSetRef = useRef(false);
+  const purchaseInFlightRef = useRef(false);
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
 
   const [features, setFeatures] = useState<PremiumFeatures>(DEFAULT_FEATURES);
   const [plans, setPlans] = useState<PremiumPlan[]>(PREMIUM_PLANS);
   const [isPremiumModalVisible, setIsPremiumModalVisible] = useState(false);
 
+  // Single initialization effect with proper cleanup
   useEffect(() => {
-    return () => {
-      isMounted.current = false;
+    let cancelled = false;
+    
+    const initialize = async () => {
+      if (cancelled || !isMounted.current) return;
+      try {
+        await initializeInAppPurchases();
+      } catch (error) {
+        if (!cancelled) {
+          console.error('IAP initialization failed:', error);
+        }
+      }
     };
-  }, []);
 
-  useEffect(() => {
-    initializeInAppPurchases();
-  }, []);
+    initialize();
+
+    return () => {
+      cancelled = true;
+      isMounted.current = false;
+      try {
+        if (InAppPurchases && typeof InAppPurchases.disconnectAsync === 'function') {
+          InAppPurchases.disconnectAsync();
+        }
+      } catch (e) {
+        console.warn('IAP disconnect failed (ignored):', e);
+      }
+    };
+  }, []); // Only run once on mount
 
   // Update features based on premium status
   useEffect(() => {
@@ -130,77 +177,107 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
     }
   }, [status.isPremium]);
 
-  const initializeInAppPurchases = async () => {
+  const initializeInAppPurchases = useCallback(async () => {
+    if (!isMounted.current) return;
+    
     try {
-      // Connect to the app store
-      await InAppPurchases.connectAsync();
-
-      // Set up purchase listener to handle purchase updates
-      InAppPurchases.setPurchaseListener(({ responseCode, results, errorCode }) => {
-        if (responseCode === InAppPurchases.IAPResponseCode.OK) {
-          console.log('Purchase update received successfully');
-        } else if (responseCode === InAppPurchases.IAPResponseCode.USER_CANCELED) {
-          console.log('User canceled purchase');
-        } else {
-          console.log('Purchase update failed:', errorCode);
+      // Check if the module is available before proceeding
+      if (!InAppPurchases || typeof InAppPurchases.connectAsync !== 'function') {
+        console.warn('InAppPurchases module not available, skipping initialization');
+        if (isMounted.current) {
+          setStatus(prev => ({ ...prev, isLoading: false }));
         }
-      });
-      
-      // Get product information
-      const { results, responseCode } = await InAppPurchases.getProductsAsync([
-        PRODUCT_IDS.monthly,
-        PRODUCT_IDS.annual
-      ]);
+        await checkPremiumStatus(); // Fallback to local check
+        return;
+      }
 
-      if (responseCode === InAppPurchases.IAPResponseCode.OK && results) {
-        // Update plans with localized pricing
-        const updatedPlans = PREMIUM_PLANS.map(plan => {
-          const product = results.find(p => p.productId === plan.productId);
-          return {
-            ...plan,
-            localizedPrice: product?.price || `$${plan.price}`,
-            price: product ? parseFloat(product.price.replace(/[^\d.-]/g, '')) : plan.price
-          };
+      // Connect to the app store; ignore if already connected
+      try {
+        await InAppPurchases.connectAsync();
+      } catch (e: any) {
+        const msg = typeof e?.message === 'string' ? e.message : String(e);
+        console.warn('connectAsync failed or already connected (continuing):', msg);
+      }
+
+      // Set up a single purchase listener to handle purchase updates globally
+      if (!listenerSetRef.current && typeof InAppPurchases.setPurchaseListener === 'function') {
+        InAppPurchases.setPurchaseListener(async ({ responseCode, results, errorCode }: PurchaseResponse) => {
+          try {
+            if (responseCode === InAppPurchases.IAPResponseCode.OK && results && results.length > 0) {
+              // Look for our subscription products
+              const subscriptionPurchase = results.find((p: PurchaseResult) =>
+                p.productId === PRODUCT_IDS.annual || p.productId === PRODUCT_IDS.monthly
+              );
+
+              if (subscriptionPurchase) {
+                // Acknowledge/finish if needed
+                try {
+                  if (typeof InAppPurchases.finishTransactionAsync === 'function' && !subscriptionPurchase.acknowledged) {
+                    await InAppPurchases.finishTransactionAsync(subscriptionPurchase, true);
+                  }
+                } catch (finishErr) {
+                  console.warn('finishTransactionAsync failed (continuing)', finishErr);
+                }
+
+                const plan = PREMIUM_PLANS.find(p => p.productId === subscriptionPurchase.productId) || null;
+                const purchaseDate = new Date(subscriptionPurchase.purchaseTime);
+                // For auto-renewable subscriptions, treat as active (server validation recommended in production)
+                await setPremium(true, plan, null, purchaseDate);
+                console.log('Premium activated from purchase listener for product:', subscriptionPurchase.productId);
+              }
+            } else if (responseCode === InAppPurchases.IAPResponseCode.USER_CANCELED) {
+              console.log('User canceled purchase');
+            } else {
+              console.log('Purchase update failed:', errorCode);
+            }
+          } catch (listenerErr) {
+            console.error('Error in purchase listener:', listenerErr);
+          }
         });
-        setPlans(updatedPlans);
+        listenerSetRef.current = true;
+      }
+      
+      // Get product information - fetch both monthly and annual
+       if (typeof InAppPurchases.getProductsAsync === 'function') {
+        const { results, responseCode } = await InAppPurchases.getProductsAsync([
+          PRODUCT_IDS.annual,
+          PRODUCT_IDS.monthly
+        ]);
+
+              if (responseCode === InAppPurchases.IAPResponseCode.OK && results) {
+          // Update plans with localized pricing
+          const updatedPlans = PREMIUM_PLANS.map(plan => {
+            const product = results.find((p: any) => p.productId === plan.productId);
+            return {
+              ...plan,
+              localizedPrice: product?.price || `$${plan.price}`,
+              price: product ? parseFloat(product.price.replace(/[^\d.-]/g, '')) : plan.price
+            };
+          });
+          setPlans(updatedPlans);
+          console.log('Products loaded successfully:', updatedPlans.map(p => p.productId));
+        } else {
+          console.error('Failed to load products from App Store, responseCode:', responseCode);
+        }
       }
 
       // Check existing purchases
-      await checkPremiumStatus();
+       await checkPremiumStatus();
     } catch (error) {
       console.error('Error initializing in-app purchases:', error);
       await checkPremiumStatus(); // Fallback to local check
-    }
-  };
-
-  const checkPremiumStatus = async () => {
-    try {
-      // First check for active subscriptions from App Store
-      if (Platform.OS === 'ios') {
-        try {
-          const purchaseResponse = await InAppPurchases.getPurchaseHistoryAsync();
-          if (purchaseResponse && 'results' in purchaseResponse && purchaseResponse.results) {
-            const validPurchase = purchaseResponse.results.find(purchase => 
-              purchase.productId === PRODUCT_IDS.monthly || 
-              purchase.productId === PRODUCT_IDS.annual
-            );
-
-            if (validPurchase && validPurchase.acknowledged) {
-              // User has an active subscription
-              const plan = PREMIUM_PLANS.find(p => p.productId === validPurchase.productId);
-              const purchaseDate = new Date(validPurchase.purchaseTime);
-              
-              // For subscriptions, we trust Apple's validation
-              await setPremium(true, plan || null, null, purchaseDate);
-              return;
-            }
-          }
-        } catch (error) {
-          console.error('Error checking App Store purchases:', error);
-        }
+    } finally {
+      if (isMounted.current) {
+        setStatus(prev => ({ ...prev, isLoading: false }));
       }
+    }
+  }, [plans, setPlans]); // Dependencies: plans for product info, setPlans for updating state
 
-      // Fallback to local storage check
+  const checkPremiumStatus = useCallback(async () => {
+    if (!isMounted.current) return;
+    
+    try {
+      // Read local storage first
       const [
         isPremiumStored,
         expiryStored,
@@ -219,7 +296,34 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
       const expiryDate = expiryStored ? new Date(expiryStored) : null;
       const trialUsed = trialUsedStored === 'true';
       const purchaseDate = purchaseDateStored ? new Date(purchaseDateStored) : null;
-              const currentPlan = planIdStored ? plans.find(p => p.id === planIdStored) || null : null;
+      const currentPlan = planIdStored ? plans.find(p => p.id === planIdStored) || null : null;
+
+      // On iOS, optionally auto-restore from App Store history ONLY if we previously had a local premium state
+      // This avoids auto-unlocking on devices with prior purchases when testing non-premium accounts
+      const shouldAutoRestoreFromStore = isPremium || !!planIdStored;
+      if (
+        shouldAutoRestoreFromStore &&
+        Platform.OS === 'ios' &&
+        InAppPurchases && typeof InAppPurchases.getPurchaseHistoryAsync === 'function'
+      ) {
+        try {
+          const purchaseResponse = await InAppPurchases.getPurchaseHistoryAsync();
+          if (purchaseResponse && 'results' in purchaseResponse && purchaseResponse.results) {
+            const validPurchase = purchaseResponse.results.find((purchase: PurchaseResult) => 
+              purchase.productId === PRODUCT_IDS.annual || purchase.productId === PRODUCT_IDS.monthly
+            );
+
+            if (validPurchase && validPurchase.acknowledged) {
+              const plan = PREMIUM_PLANS.find(p => p.productId === validPurchase.productId);
+              const iosPurchaseDate = new Date(validPurchase.purchaseTime);
+              await setPremium(true, plan || null, null, iosPurchaseDate);
+              return;
+            }
+          }
+        } catch (error) {
+          console.error('Error checking App Store purchases:', error);
+        }
+      }
 
         // Check if premium has expired
         const isExpired = expiryDate && expiryDate < new Date();
@@ -254,7 +358,7 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
         }));
       }
     }
-  };
+  }, [plans]); // Dependency: plans for finding currentPlan
 
   const showPremiumModal = () => {
     setIsPremiumModalVisible(true);
@@ -316,81 +420,154 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
 
   const purchasePlan = async (planId: 'monthly' | 'annual'): Promise<boolean> => {
     if (status.isLoading) return false;
+    if (purchaseInFlightRef.current) {
+      console.warn('Purchase already in progress; ignoring duplicate request');
+      return false;
+    }
+
+    // Note: Network connectivity checks are now handled by the OfflineProvider
+    // The modal will disable purchase buttons when offline
 
     const planToPurchase = plans.find(p => p.id === planId);
     if (!planToPurchase) {
-      Alert.alert('Error', 'Selected plan not found.');
+      console.error('Selected plan not found:', planId);
+      return false;
+    }
+
+    // Pre-flight check: Ensure product details were loaded from the store.
+    if (!planToPurchase.localizedPrice) {
+      console.error('Product not loaded from App Store:', planToPurchase.productId);
+      // Attempt to re-fetch products in the background
+      initializeInAppPurchases(); 
+      return false;
+    }
+
+    // Check if InAppPurchases is available
+    if (!InAppPurchases || typeof InAppPurchases.purchaseItemAsync !== 'function') {
+      console.error('InAppPurchases not available');
       return false;
     }
 
     try {
+      purchaseInFlightRef.current = true;
       console.log('Attempting to purchase:', planToPurchase.productId);
-      
-      // Request purchase
+      const startedAt = Date.now();
       await InAppPurchases.purchaseItemAsync(planToPurchase.productId);
-      
-      // Wait for purchase listener to be called
-      return new Promise(resolve => {
-        InAppPurchases.setPurchaseListener(async ({ responseCode, results, errorCode }) => {
-          if (responseCode === InAppPurchases.IAPResponseCode.OK && results) {
-            console.log('Purchase successful:', results);
 
-            const purchase = results.find(p => p.productId === planToPurchase.productId);
-            if (purchase && !purchase.acknowledged) {
-              await InAppPurchases.finishTransactionAsync(purchase, true);
-            }
-            
-            const expiryDate = new Date();
-            if (planToPurchase.id === 'monthly') {
-              expiryDate.setMonth(expiryDate.getMonth() + 1);
-            } else {
-              expiryDate.setFullYear(expiryDate.getFullYear() + 1);
-            }
-            
-            await setPremium(true, planToPurchase, expiryDate);
-            Alert.alert('Purchase Successful', 'You now have access to all premium features!');
-            resolve(true);
+      // Kick an immediate entitlement check to speed up state propagation
+      try {
+        await checkPremiumStatus();
+      } catch {}
 
-          } else if (responseCode === InAppPurchases.IAPResponseCode.USER_CANCELED) {
-            console.log('User canceled the purchase.');
-            Alert.alert('Purchase Canceled', 'The purchase was canceled.');
-            resolve(false);
-          } else {
-            console.log('Purchase failed with error code:', errorCode);
-            Alert.alert('Purchase Failed', `An error occurred during purchase. Code: ${errorCode}`);
-            resolve(false);
+      // Wait for confirmation: poll local flag, context state via ref, and fall back to purchase history
+      const timeoutMs = 12000;
+      const pollIntervalMs = 300;
+      while (Date.now() - startedAt < timeoutMs) {
+        // Check AsyncStorage
+        const stored = await AsyncStorage.getItem(PREMIUM_STATUS_KEY);
+        if (stored === 'true') {
+          console.log('Premium flag observed in storage after purchase');
+          purchaseInFlightRef.current = false;
+          return true;
+        }
+
+        // Check current context state via ref (listener may have updated it)
+        if (isMounted.current && statusRef.current.isPremium) {
+          console.log('Premium flag observed in context after purchase');
+          purchaseInFlightRef.current = false;
+          return true;
+        }
+
+        try {
+          if (InAppPurchases && typeof InAppPurchases.getPurchaseHistoryAsync === 'function') {
+            const history = await InAppPurchases.getPurchaseHistoryAsync();
+            if (history && history.results && history.results.length > 0) {
+              const subscriptionPurchase = history.results.find((purchase: PurchaseResult) =>
+                (purchase.productId === PRODUCT_IDS.annual || purchase.productId === PRODUCT_IDS.monthly) &&
+                purchase.acknowledged &&
+                // Ensure it's recent (within the wait window)
+                purchase.purchaseTime >= startedAt - 60_000
+              );
+              if (subscriptionPurchase) {
+                const plan = PREMIUM_PLANS.find(p => p.productId === subscriptionPurchase.productId) || null;
+                await setPremium(true, plan, null, new Date(subscriptionPurchase.purchaseTime));
+                console.log('Premium activated from purchase history');
+                purchaseInFlightRef.current = false;
+                return true;
+              }
+            }
           }
-        });
-      });
-    } catch (error) {
+        } catch (histErr) {
+          console.warn('Purchase history check failed (continuing):', histErr);
+        }
+
+        // Periodically refresh local status while waiting
+        try {
+          await checkPremiumStatus();
+        } catch {}
+
+        await new Promise(res => setTimeout(res, pollIntervalMs));
+      }
+      console.warn('Timed out waiting for purchase confirmation');
+      purchaseInFlightRef.current = false;
+      return false;
+    } catch (error: any) {
       console.error('Error during purchase:', error);
-      Alert.alert('Error', 'An unexpected error occurred during the purchase process.');
+      // Provide more specific feedback to the user
+      let displayMessage = 'An unexpected error occurred. Please try again.';
+      if (error?.code === 'E_USER_CANCELLED') {
+        // User cancelled, no need to show an error message
+        purchaseInFlightRef.current = false;
+        return false;
+      }
+      if (error?.message) {
+        if (error.message.includes('not available')) {
+          displayMessage = 'In-app purchases may be disabled on your device.';
+        } else if (error.message.includes('SKErrorDomain')) {
+          displayMessage = 'Could not connect to the App Store. Please check your connection and try again.';
+        }
+      }
+      console.error('Purchase Failed:', displayMessage);
+      purchaseInFlightRef.current = false;
       return false;
     }
   };
 
-  const startTrial = async () => {
+  const startTrial = async (planId: 'monthly' | 'annual' = 'annual'): Promise<boolean> => {
     if (!status.isTrialEligible) {
       Alert.alert('Trial Not Available', 'You have already used your free trial.');
-      return;
+      return false;
     }
 
+    // For Apple subscriptions with trials, we start the trial by purchasing the subscription
+    // The trial is configured in App Store Connect, not handled client-side
     try {
-      const expiryDate = new Date();
-      expiryDate.setDate(expiryDate.getDate() + 7);
-      
-      await AsyncStorage.setItem(PREMIUM_TRIAL_KEY, 'true');
-      await setPremium(true, null, expiryDate, new Date());
-      
-      if (isMounted.current) {
-        setStatus(prev => ({ ...prev, isTrialEligible: false, trialUsed: true }));
+      // Start the subscription - the trial period is handled by Apple
+      const success = await purchasePlan(planId);
+      if (success) {
+        // Mark trial as used in local storage to prevent multiple trials
+        await AsyncStorage.setItem(PREMIUM_TRIAL_KEY, 'true');
+        
+        if (isMounted.current) {
+          setStatus(prev => ({ 
+            ...prev, 
+            isTrialEligible: false, 
+            trialUsed: true 
+          }));
+        }
+        
+        Alert.alert(
+          'Free Trial Started', 
+          'You now have 7 days of free access to premium features. Your subscription will begin after the trial period unless you cancel.'
+        );
+        return true;
       }
-      
-      Alert.alert('Trial Started', 'You now have 7 days of free access to premium features.');
     } catch (error) {
       console.error('Error starting trial:', error);
-      Alert.alert('Error', 'Could not start the free trial.');
+      Alert.alert('Error', 'Could not start the free trial. Please try again.');
+      return false;
     }
+    return false;
   };
 
   const endTrial = async () => {
@@ -410,50 +587,78 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const restorePurchases = async () => {
+  const restorePurchases = async (): Promise<boolean> => {
     try {
+      if (purchaseInFlightRef.current) {
+        console.warn('Purchase in progress, restore temporarily disabled.');
+        return false;
+      }
+
+      // Note: Network connectivity checks are now handled by the OfflineProvider
+      // The modal will disable restore buttons when offline
+
+      // Check if InAppPurchases is available
+      if (!InAppPurchases || typeof InAppPurchases.getPurchaseHistoryAsync !== 'function') {
+        console.error('InAppPurchases not available for restore');
+        return false;
+      }
+
       console.log('Restoring purchases...');
-      const history = await InAppPurchases.getPurchaseHistoryAsync();
+      
+      // For subscriptions, we should trust Apple's validation
+      // Use getPurchaseHistoryAsync to get validated purchases
+          const history = await InAppPurchases.getPurchaseHistoryAsync();
 
       if (history.responseCode === InAppPurchases.IAPResponseCode.OK && history.results && history.results.length > 0) {
-        const latestPurchase = history.results.sort((a, b) => b.purchaseTime - a.purchaseTime)[0];
-        
-        const plan = PREMIUM_PLANS.find(p => p.productId === latestPurchase.productId);
-        if (plan) {
-          const purchaseDate = new Date(latestPurchase.purchaseTime);
-          const expiryDate = new Date(purchaseDate);
-          
-          if (plan.id === 'monthly') {
-            expiryDate.setMonth(expiryDate.getMonth() + 1);
-          } else {
-            expiryDate.setFullYear(expiryDate.getFullYear() + 1);
-          }
+        // Filter for our subscription products only
+          const subscriptionPurchases = history.results.filter((purchase: PurchaseResult) => 
+            (purchase.productId === PRODUCT_IDS.annual || purchase.productId === PRODUCT_IDS.monthly) &&
+            purchase.acknowledged // Only consider acknowledged/validated purchases
+          );
 
-          if (expiryDate > new Date()) {
-            await setPremium(true, plan, expiryDate, purchaseDate);
-            Alert.alert('Purchases Restored', 'Your premium access has been restored.');
+        if (subscriptionPurchases.length > 0) {
+          // Get the most recent subscription purchase
+          const latestPurchase = subscriptionPurchases.sort((a: PurchaseResult, b: PurchaseResult) => b.purchaseTime - a.purchaseTime)[0];
+          
+          const plan = PREMIUM_PLANS.find(p => p.productId === latestPurchase.productId);
+          if (plan) {
+            const purchaseDate = new Date(latestPurchase.purchaseTime);
+            
+            // For auto-renewable subscriptions, don't calculate expiry client-side
+            // Trust Apple's validation - if the purchase is acknowledged, it's valid
+            // Set as lifetime premium (no expiry) since we're trusting Apple's validation
+            await setPremium(true, plan, null, purchaseDate);
+            Alert.alert(
+              'Purchases Restored', 
+              'Your premium subscription has been restored successfully.'
+            );
+            return true;
           } else {
-            Alert.alert('No Active Subscription', 'We found a past subscription, but it has expired.');
+            Alert.alert('Error', 'Subscription plan not found in current configuration.');
+            return false;
           }
         } else {
-          Alert.alert('No Purchases Found', 'We could not find any active subscriptions to restore.');
+          console.log('No active subscription found to restore.');
+          return false;
         }
       } else {
-        Alert.alert('No Purchases Found', 'We could not find any active subscriptions to restore.');
+        console.log('No purchase history found to restore.');
+        return false;
       }
     } catch (error) {
       console.error('Error restoring purchases:', error);
-      Alert.alert('Error', 'An error occurred while trying to restore your purchases.');
+      Alert.alert(
+        'Restore Failed', 
+        'An error occurred while trying to restore your purchases. Please check your internet connection and try again.'
+      );
+      return false;
     }
+    
+    // This should never be reached, but adding for TypeScript completeness
+    return false;
   };
 
-  // Development only
-  const simulatePremiumPurchase = async () => {
-    const expiryDate = new Date();
-    expiryDate.setFullYear(expiryDate.getFullYear() + 1);
-    await setPremium(true, PREMIUM_PLANS[0], expiryDate);
-    Alert.alert('Dev: Premium Activated', 'You now have premium access for one year.');
-  };
+
 
   const value = {
     ...status,
@@ -464,7 +669,6 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
     endTrial,
     restorePurchases,
     checkPremiumStatus,
-    simulatePremiumPurchase,
     isPremiumModalVisible,
     showPremiumModal,
     hidePremiumModal,

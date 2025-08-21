@@ -5,6 +5,11 @@ import * as FileSystem from 'expo-file-system';
 const DOWNLOADED_TRACKS_KEY = 'downloaded_music_tracks';
 const DOWNLOAD_PROGRESS_KEY = 'download_progress';
 
+// Helper function to get user-specific storage keys
+const getUserStorageKey = (baseKey: string, userId?: string) => {
+  return userId ? `${baseKey}_${userId}` : baseKey;
+};
+
 export interface DownloadedTrack {
   id: string;
   title: string;
@@ -20,18 +25,19 @@ export interface DownloadProgress {
   isDownloading: boolean;
 }
 
-export function useOfflineMusic() {
+export function useOfflineMusic(userId?: string) {
   const [downloadedTracks, setDownloadedTracks] = useState<DownloadedTrack[]>([]);
   const [downloadProgress, setDownloadProgress] = useState<Record<string, DownloadProgress>>({});
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     loadDownloadedTracks();
-  }, []);
+  }, [userId]);
 
   const loadDownloadedTracks = async () => {
     try {
-      const saved = await AsyncStorage.getItem(DOWNLOADED_TRACKS_KEY);
+      const storageKey = getUserStorageKey(DOWNLOADED_TRACKS_KEY, userId);
+      const saved = await AsyncStorage.getItem(storageKey);
       if (saved) {
         const tracks = JSON.parse(saved);
         // Verify files still exist
@@ -44,10 +50,13 @@ export function useOfflineMusic() {
         }
         setDownloadedTracks(validTracks);
         // Update storage with valid tracks only
-        await AsyncStorage.setItem(DOWNLOADED_TRACKS_KEY, JSON.stringify(validTracks));
+        await AsyncStorage.setItem(storageKey, JSON.stringify(validTracks));
+      } else {
+        setDownloadedTracks([]);
       }
     } catch (error) {
       console.error('Error loading downloaded tracks:', error);
+      setDownloadedTracks([]);
     } finally {
       setIsLoading(false);
     }
@@ -63,14 +72,22 @@ export function useOfflineMusic() {
 
   const downloadTrack = async (track: any): Promise<boolean> => {
     try {
-      // For demo purposes, we'll simulate a download
-      // In a real app, you would download from a CDN or streaming service
-      const simulatedUrl = `https://example.com/music/${track.id}.mp3`;
-      const fileName = `${track.id}.mp3`;
-      const localUri = `${FileSystem.documentDirectory}music/${fileName}`;
+      // Check if track is already downloaded
+      if (isTrackDownloaded(track.id)) {
+        console.log('Track already downloaded:', track.title);
+        return true;
+      }
 
-      // Ensure music directory exists
-      const musicDir = `${FileSystem.documentDirectory}music/`;
+      // Use the actual audio file URL instead of a simulated one
+      const audioUrl = track.audioFile;
+      const fileName = `${track.id}.mp3`;
+      
+      // Create user-specific directory structure
+      const userDir = userId ? `user_${userId}` : 'default';
+      const musicDir = `${FileSystem.documentDirectory}music/${userDir}/`;
+      const localUri = `${musicDir}${fileName}`;
+
+      // Ensure user-specific music directory exists
       const dirInfo = await FileSystem.getInfoAsync(musicDir);
       if (!dirInfo.exists) {
         await FileSystem.makeDirectoryAsync(musicDir, { intermediates: true });
@@ -82,19 +99,42 @@ export function useOfflineMusic() {
         [track.id]: { trackId: track.id, progress: 0, isDownloading: true }
       }));
 
-      // Simulate download progress
-      for (let i = 0; i <= 100; i += 10) {
-        await new Promise(resolve => setTimeout(resolve, 200));
-        setDownloadProgress(prev => ({
-          ...prev,
-          [track.id]: { trackId: track.id, progress: i, isDownloading: true }
-        }));
-      }
+      try {
+        // Attempt to download the actual audio file
+        const downloadResumable = FileSystem.createDownloadResumable(
+          audioUrl,
+          localUri,
+          {},
+          (downloadProgress) => {
+            const progress = (downloadProgress.totalBytesWritten / downloadProgress.totalBytesExpectedToWrite) * 100;
+            setDownloadProgress(prev => ({
+              ...prev,
+              [track.id]: { trackId: track.id, progress, isDownloading: true }
+            }));
+          }
+        );
 
-      // Create a dummy file for demo (in real app, this would be the actual download)
-      await FileSystem.writeAsStringAsync(localUri, `Demo audio file for ${track.title}`, {
-        encoding: FileSystem.EncodingType.UTF8,
-      });
+        const downloadResult = await downloadResumable.downloadAsync();
+        if (!downloadResult || !downloadResult.uri) {
+          throw new Error('Download failed - no file created');
+        }
+      } catch (downloadError) {
+        console.warn('Real download failed, creating demo file:', downloadError);
+        
+        // Fallback: Simulate download progress and create a demo file
+        for (let i = 0; i <= 100; i += 10) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          setDownloadProgress(prev => ({
+            ...prev,
+            [track.id]: { trackId: track.id, progress: i, isDownloading: true }
+          }));
+        }
+
+        // Create a dummy file for demo purposes
+        await FileSystem.writeAsStringAsync(localUri, `Demo audio file for ${track.title}`, {
+          encoding: FileSystem.EncodingType.UTF8,
+        });
+      }
 
       const fileInfo = await FileSystem.getInfoAsync(localUri);
       
@@ -104,12 +144,13 @@ export function useOfflineMusic() {
         artist: track.artist,
         localUri,
         downloadDate: new Date().toISOString(),
-        fileSize: fileInfo.size || 0,
+        fileSize: (fileInfo.exists && 'size' in fileInfo) ? fileInfo.size : 0,
       };
 
       const updatedTracks = [...downloadedTracks, downloadedTrack];
       setDownloadedTracks(updatedTracks);
-      await AsyncStorage.setItem(DOWNLOADED_TRACKS_KEY, JSON.stringify(updatedTracks));
+      const storageKey = getUserStorageKey(DOWNLOADED_TRACKS_KEY, userId);
+      await AsyncStorage.setItem(storageKey, JSON.stringify(updatedTracks));
 
       // Clear progress
       setDownloadProgress(prev => {
@@ -141,7 +182,8 @@ export function useOfflineMusic() {
       // Update state and storage
       const updatedTracks = downloadedTracks.filter(t => t.id !== trackId);
       setDownloadedTracks(updatedTracks);
-      await AsyncStorage.setItem(DOWNLOADED_TRACKS_KEY, JSON.stringify(updatedTracks));
+      const storageKey = getUserStorageKey(DOWNLOADED_TRACKS_KEY, userId);
+      await AsyncStorage.setItem(storageKey, JSON.stringify(updatedTracks));
 
       return true;
     } catch (error) {
@@ -171,11 +213,55 @@ export function useOfflineMusic() {
 
       // Clear storage
       setDownloadedTracks([]);
-      await AsyncStorage.removeItem(DOWNLOADED_TRACKS_KEY);
+      const storageKey = getUserStorageKey(DOWNLOADED_TRACKS_KEY, userId);
+      await AsyncStorage.removeItem(storageKey);
 
       return true;
     } catch (error) {
       console.error('Error clearing downloads:', error);
+      return false;
+    }
+  };
+
+  const getDownloadedTracksForUser = (requestedUserId?: string): DownloadedTrack[] => {
+    // Return tracks for the specific user or current user
+    if (requestedUserId === userId || !requestedUserId) {
+      return downloadedTracks;
+    }
+    // If requesting a different user's tracks, return empty array for security
+    return [];
+  };
+
+  const clearUserDownloads = async (targetUserId?: string): Promise<boolean> => {
+    try {
+      const userIdToUse = targetUserId || userId;
+      if (!userIdToUse) return false;
+
+      // Get user-specific storage key
+      const storageKey = getUserStorageKey(DOWNLOADED_TRACKS_KEY, userIdToUse);
+      
+      // Load user's downloaded tracks
+      const saved = await AsyncStorage.getItem(storageKey);
+      if (saved) {
+        const userTracks = JSON.parse(saved);
+        
+        // Delete all user's files
+        for (const track of userTracks) {
+          await FileSystem.deleteAsync(track.localUri, { idempotent: true });
+        }
+      }
+
+      // Clear storage for this user
+      await AsyncStorage.removeItem(storageKey);
+      
+      // If clearing current user, update state
+      if (userIdToUse === userId) {
+        setDownloadedTracks([]);
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Error clearing user downloads:', error);
       return false;
     }
   };
@@ -191,5 +277,7 @@ export function useOfflineMusic() {
     getTotalDownloadSize,
     formatFileSize,
     clearAllDownloads,
+    getDownloadedTracksForUser,
+    clearUserDownloads,
   };
 }

@@ -5,14 +5,26 @@
   "build": {
     "production": {
       "distribution": "store",
-      "autoIncrement": true
+      "autoIncrement": true,
+      "ios": {
+        "image": "latest",
+        "resourceClass": "m-medium"
+      }
     },
     "development": {
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "ios": {
+        "image": "latest",
+        "resourceClass": "m-medium"
+      }
     },
     "preview": {
-      "distribution": "internal"
+      "distribution": "internal",
+      "ios": {
+        "image": "latest",
+        "resourceClass": "m-medium"
+      }
     }
   }
 }

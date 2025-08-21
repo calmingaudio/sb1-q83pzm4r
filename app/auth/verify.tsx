@@ -1,16 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, Linking } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, Linking, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Mail, ArrowLeft, RefreshCw, CircleCheck as CheckCircle } from 'lucide-react-native';
 import { useTheme } from '@/components/ThemeProvider';
 import { useAuth } from '@/context/authContext';
+import { useOfflineContext } from '@/components/OfflineProvider';
 import { router, useLocalSearchParams } from 'expo-router';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 
 export default function VerifyScreen() {
   const { colors } = useTheme();
   const { sendMagicLink } = useAuth();
+  const { shouldUseOfflineMode } = useOfflineContext();
   const params = useLocalSearchParams();
   
   const email = params.email as string;
@@ -32,6 +34,15 @@ export default function VerifyScreen() {
 
   const handleResendLink = async () => {
     if (resendCooldown > 0 || isResending) return;
+    
+    // Check if we're in offline mode
+    if (shouldUseOfflineMode) {
+      Alert.alert(
+        'Offline Mode',
+        'Magic links require an internet connection. Please connect to the internet and try again.'
+      );
+      return;
+    }
     
     setIsResending(true);
     try {
@@ -142,7 +153,7 @@ export default function VerifyScreen() {
                 <CheckCircle size={20} color={colors.success} strokeWidth={2} />
               </View>
               <Text style={styles.instructionText}>
-                You'll be automatically signed in!
+                You'll be automatically signed in to SkyCalm!
               </Text>
             </View>
           </View>

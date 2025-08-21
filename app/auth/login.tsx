@@ -10,11 +10,11 @@ import { useOfflineContext } from '@/components/OfflineProvider';
 import { router } from 'expo-router';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
-import { faGoogle, faApple } from '@fortawesome/free-brands-svg-icons';
+import { faApple } from '@fortawesome/free-brands-svg-icons';
 
 export default function SignInScreen() {
   const { colors } = useTheme();
-  const { signInWithGoogle, sendMagicLink, signInWithApple, signInWithEmail, signUpWithEmail } = useAuth();
+  const { sendMagicLink, signInWithApple, signInWithEmail, signUpWithEmail, createOfflineUser } = useAuth();
   const { isOnline, shouldUseOfflineMode, createMockOfflineUser } = useOfflineContext();
   
   const [email, setEmail] = useState('');
@@ -41,6 +41,20 @@ export default function SignInScreen() {
     setErrors({});
     
     try {
+      // Check if we're in offline mode
+      if (shouldUseOfflineMode) {
+        // Create offline user for immediate access
+        const result = await createOfflineUser(email, email.split('@')[0]); // Use email prefix as name
+        if (result.success) {
+          // Navigate to main app immediately
+          router.replace('/(tabs)');
+        } else {
+          setErrors({ general: result.error || 'Failed to create offline user' });
+        }
+        return;
+      }
+      
+      // Online mode - send magic link
       const result = await sendMagicLink(email);
       if (result.success) {
         router.push({
@@ -57,6 +71,7 @@ export default function SignInScreen() {
     }
   };
 
+  /*
   const handleGoogleSignIn = async () => {
     // Note: This would require Google Sign-In SDK integration
     Alert.alert(
@@ -65,6 +80,7 @@ export default function SignInScreen() {
       [{ text: 'OK' }]
     );
   };
+  */
 
   const handleAppleSignIn = async () => {
     try {
@@ -217,8 +233,8 @@ export default function SignInScreen() {
             onPress={handleSignIn}
             disabled={isLoading}
           >
-            <LinearGradient
-              colors={colors.gradient.primary}
+              <LinearGradient
+              colors={colors.gradient.primary as readonly [string, string, ...string[]]}
               style={styles.signInButtonGradient}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
@@ -239,6 +255,7 @@ export default function SignInScreen() {
 
           {/* Social Sign In */}
           <View style={styles.socialButtons}>
+            {/**
             <TouchableOpacity 
               style={styles.socialButton} 
               onPress={handleGoogleSignIn}
@@ -247,6 +264,7 @@ export default function SignInScreen() {
               <FontAwesomeIcon icon={faGoogle} size={20} color={colors.text} />
               <Text style={styles.socialButtonLabel}>Google</Text>
             </TouchableOpacity>
+            */}
 
             {Platform.OS === 'ios' && (
               <TouchableOpacity 

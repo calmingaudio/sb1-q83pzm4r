@@ -1,0 +1,31 @@
+{
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "hosting": {
+    "public": "public",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "/test-deeplink",
+        "destination": "/test-deeplink.html"
+      },
+      {
+        "source": "/auth",
+        "destination": "/auth.html"
+      },
+      {
+        "source": "/auth/**",
+        "destination": "/auth.html"
+      },
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
+}

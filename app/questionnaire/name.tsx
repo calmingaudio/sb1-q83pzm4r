@@ -13,7 +13,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import Colors from "@/constants/Colors";
 import { router } from "expo-router";
 import Animated, { FadeInDown } from "react-native-reanimated";
-import { useAuthentication } from "@/hooks/useAuthentication";
+import { useAuth } from "@/context/authContext";
 
 export default function NameScreen() {
   const [firstName, setFirstName] = useState("");
@@ -21,7 +21,7 @@ export default function NameScreen() {
   const [isLoading, setIsLoading] = useState(false);
 
   // Use our new unified hook to get the updateProfile function
-  const { updateProfile } = useAuthentication();
+  const { user } = useAuth();
 
   // Ref for smooth keyboard navigation
   const lastNameInputRef = useRef<TextInput>(null);

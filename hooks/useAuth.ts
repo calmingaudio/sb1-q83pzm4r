@@ -21,6 +21,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as AppleAuthentication from "expo-apple-authentication";
 import * as Crypto from "expo-crypto";
 import { Alert } from "react-native";
+import * as Linking from 'expo-linking';
+import { router } from 'expo-router';
 
 const PENDING_EMAIL_KEY = 'pending_email';
 const PENDING_NAME_KEY = 'pending_name';
@@ -84,97 +86,123 @@ export function useAuth() {
   }, []);
 
   useEffect(() => {
-    const auth = getFirebaseAuth();
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (isMounted.current) {
-        setAuthState({
-          user,
-          isLoading: false,
-        });
-
-        // Sync user data to offline storage when auth state changes
-        if (user) {
-          await syncUserDataToOffline(user);
-        }
-      }
-    });
-
-    // Check if this is a magic link sign-in
-    checkMagicLinkSignIn();
-
-    return unsubscribe;
-  }, []);
-
-  const syncUserDataToOffline = async (user: User) => {
-    try {
-      const offlineUserData = {
-        uid: user.uid,
-        email: user.email || '',
-        displayName: user.displayName,
-        photoURL: user.photoURL,
-        emailVerified: user.emailVerified,
-        lastSignInTime: user.metadata.lastSignInTime || new Date().toISOString(),
-        createdAt: user.metadata.creationTime || new Date().toISOString(),
-      };
-
-      await AsyncStorage.setItem('offline_user_data', JSON.stringify(offlineUserData));
-      await AsyncStorage.setItem('offline_auth_last_sync', new Date().toISOString());
-
-      // Try to fetch and cache user profile
-      try {
-        const userDoc = await getDoc(doc(db, 'users', user.uid));
-        if (userDoc.exists()) {
-          const profileData = userDoc.data();
-          await AsyncStorage.setItem('offline_user_profile', JSON.stringify(profileData));
-        }
-      } catch (profileError) {
-        console.warn('Could not sync user profile:', profileError);
-      }
-    } catch (error) {
-      console.error('Error syncing user data to offline:', error);
-    }
-  };
-
-  const checkMagicLinkSignIn = async () => {
     try {
       const auth = getFirebaseAuth();
-      // For React Native, we need to handle magic links differently
-      // This would typically be handled through deep linking
-      // For now, we'll keep the web logic but adapt it for React Native
-      if (isSignInWithEmailLink(auth, 'dummy-url')) {
-        let email = await AsyncStorage.getItem(PENDING_EMAIL_KEY);
+      const unsubscribe = onAuthStateChanged(auth, async (user) => {
+        console.log('Auth state changed:', user ? 'User logged in' : 'User logged out');
+        if (isMounted.current) {
+          setAuthState({
+            user,
+            isLoading: false,
+          });
+
+          // Note: Offline syncing is now handled by useOfflineAuth to avoid duplication
+        }
+      });
+
+      // Set up deep link listener for magic links
+      const subscription = Linking.addEventListener('url', handleDeepLink);
+
+      // Check for initial URL (app opened via deep link)
+      Linking.getInitialURL().then((url) => {
+        if (url) {
+          handleDeepLink({ url });
+        }
+      });
+
+      return () => {
+        subscription?.remove();
+        unsubscribe();
+      };
+    } catch (error) {
+      console.error('Error setting up auth state listener:', error);
+      // Set loading to false even if Firebase fails
+      if (isMounted.current) {
+        setAuthState({
+          user: null,
+          isLoading: false,
+        });
+      }
+    }
+  }, []);
+
+  const handleDeepLink = async ({ url }: { url: string }) => {
+    try {
+      console.log('Handling deep link:', url);
+      const auth = getFirebaseAuth();
+      
+      // Check if this is a magic link
+      if (isSignInWithEmailLink(auth, url)) {
+        console.log('Magic link detected, processing...');
+        
+        // Get the email from AsyncStorage
+        const email = await AsyncStorage.getItem(PENDING_EMAIL_KEY);
         const name = await AsyncStorage.getItem(PENDING_NAME_KEY);
         
+        console.log('Stored email:', email);
+        console.log('Stored name:', name);
+        
         if (!email) {
-          // In React Native, we'd typically get this from the deep link
-          // For now, we'll skip this flow
+          console.error('No pending email found for magic link');
+          Alert.alert(
+            'Magic Link Error',
+            'No pending email found. Please try signing in again.'
+          );
           return;
         }
         
-        if (email) {
-          const result = await signInWithEmailLink(auth, email, 'dummy-url');
+        // Complete the sign-in
+        const result = await signInWithEmailLink(auth, email, url);
+        console.log('Sign-in result:', result);
+        
+        // Check if this was an offline user completing verification
+        const hasPending = await hasPendingMagicLink();
+        if (hasPending) {
+          await completeOfflineUserVerification(email, result.user);
+        }
+        
+        // If this was a sign-up flow and we have a name, update the profile
+        if (result.user && name) {
+          await updateProfile(result.user, { displayName: name });
           
-          // If this was a sign-up flow and we have a name, update the profile
-          if (result.user && name) {
-            await updateProfile(result.user, { displayName: name });
-            
-            // Extract first and last name from displayName
-            const nameParts = name.split(' ');
-            const firstName = nameParts[0] || '';
-            const lastName = nameParts.slice(1).join(' ') || '';
-            
-            // Create profile in Firestore
-            await createProfileIfNotExists(result.user, firstName, lastName, false);
-          }
+          // Extract first and last name from displayName
+          const nameParts = name.split(' ');
+          const firstName = nameParts[0] || '';
+          const lastName = nameParts.slice(1).join(' ') || '';
           
-          // Clean up stored data
+          // Create profile in Firestore
+          await createProfileIfNotExists(result.user, firstName, lastName, false);
+        }
+        
+        // Clean up stored data (only if not handling offline user verification)
+        if (!hasPending) {
           await AsyncStorage.multiRemove([PENDING_EMAIL_KEY, PENDING_NAME_KEY]);
         }
+        
+        console.log('Magic link sign-in successful');
+        
+        // Note: User data syncing is handled by useOfflineAuth when auth state changes
+        
+        // Wait for the OfflineProvider to update its state
+        console.log('Waiting for auth state to update...');
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Navigate to the main app after successful sign-in
+        console.log('Navigating to main app after magic link sign-in');
+        router.replace('/(tabs)');
+      } else {
+        console.log('Not a magic link or already processed');
       }
     } catch (error) {
-      console.error('Error with magic link sign-in:', error);
+      console.error('Error handling deep link:', error);
+      Alert.alert(
+        'Magic Link Error',
+        'There was an error processing the magic link. Please try signing in again.'
+      );
     }
   };
+
+
 
   const signInWithEmail = async (email: string, password: string) => {
     try {
@@ -214,8 +242,15 @@ export function useAuth() {
     try {
       const auth = getFirebaseAuth();
       const actionCodeSettings = {
-        url: 'skycalm://auth', // Deep link URL for React Native
+        url: 'https://skycalm-a8562.web.app/auth', // Firebase hosting URL as fallback
         handleCodeInApp: true,
+        iOS: {
+          bundleId: 'com.skycalm.app',
+        },
+        android: {
+          packageName: 'com.calmingaudio.skycalm',
+          installApp: true,
+        },
       };
 
       await sendSignInLinkToEmail(auth, email, actionCodeSettings);
@@ -228,8 +263,104 @@ export function useAuth() {
       
       return { success: true };
     } catch (error: any) {
+      console.error('Magic link error:', error);
+      return { success: false, error: error.message || 'Failed to send magic link' };
+    }
+  };
+
+  // New method: Create offline user for immediate access
+  const createOfflineUser = async (email: string, name: string) => {
+    try {
+      const offlineUserData = {
+        uid: 'offline-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9),
+        email,
+        displayName: name,
+        photoURL: null,
+        emailVerified: false, // Will be verified when they complete magic link
+        lastSignInTime: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+        isOfflineUser: true, // Flag to identify offline users
+        pendingMagicLink: true, // Flag to indicate magic link is pending
+      };
+
+      // Store offline user data
+      await AsyncStorage.setItem('offline_user_data', JSON.stringify(offlineUserData));
+      await AsyncStorage.setItem('offline_auth_last_sync', new Date().toISOString());
+      
+      // Store pending magic link info
+      await AsyncStorage.setItem(PENDING_EMAIL_KEY, email);
+      await AsyncStorage.setItem(PENDING_NAME_KEY, name);
+      await AsyncStorage.setItem('pending_magic_link', 'true');
+
+      return { success: true, user: offlineUserData };
+    } catch (error: any) {
+      console.error('Error creating offline user:', error);
+      return { success: false, error: error.message || 'Failed to create offline user' };
+    }
+  };
+
+  // New method: Complete offline user verification when magic link is processed
+  const completeOfflineUserVerification = async (email: string, firebaseUser: User) => {
+    try {
+      // Get the offline user data
+      const offlineUserDataStr = await AsyncStorage.getItem('offline_user_data');
+      if (!offlineUserDataStr) {
+        console.log('No offline user data found, proceeding with normal flow');
+        return { success: true };
+      }
+
+      const offlineUserData = JSON.parse(offlineUserDataStr);
+      
+      // Update offline user data with Firebase user info
+      const updatedOfflineUserData = {
+        ...offlineUserData,
+        uid: firebaseUser.uid, // Use real Firebase UID
+        emailVerified: firebaseUser.emailVerified,
+        lastSignInTime: firebaseUser.metadata.lastSignInTime || new Date().toISOString(),
+        isOfflineUser: false, // No longer an offline user
+        pendingMagicLink: false, // Magic link completed
+      };
+
+      // Update stored data
+      await AsyncStorage.setItem('offline_user_data', JSON.stringify(updatedOfflineUserData));
+      await AsyncStorage.setItem('offline_auth_last_sync', new Date().toISOString());
+      
+      // Clear pending magic link flags
+      await AsyncStorage.multiRemove([
+        'pending_magic_link',
+        PENDING_EMAIL_KEY,
+        PENDING_NAME_KEY
+      ]);
+
+      return { success: true };
+    } catch (error: any) {
+      console.error('Error completing offline user verification:', error);
       return { success: false, error: error.message };
     }
+  };
+
+  // New method: Check if user has pending magic link
+  const hasPendingMagicLink = async () => {
+    try {
+      const pendingMagicLink = await AsyncStorage.getItem('pending_magic_link');
+      const pendingEmail = await AsyncStorage.getItem(PENDING_EMAIL_KEY);
+      return pendingMagicLink === 'true' && !!pendingEmail;
+    } catch (error) {
+      return false;
+    }
+  };
+
+  // New method: Get offline user data
+  const getOfflineUser = async () => {
+    try {
+      const offlineUserData = await AsyncStorage.getItem('offline_user_data');
+      if (offlineUserData) {
+        return JSON.parse(offlineUserData);
+      }
+    } catch (error) {
+      console.error('Error getting offline user:', error);
+    }
+    return null;
   };
 
   const signInWithGoogle = async (idToken: string) => {
@@ -350,11 +481,54 @@ export function useAuth() {
 
   const logout = async () => {
     try {
+      console.log('Starting logout process...');
       const auth = getFirebaseAuth();
       await signOut(auth);
-      await AsyncStorage.multiRemove([PENDING_EMAIL_KEY, PENDING_NAME_KEY]);
+      console.log('Firebase signOut completed');
+      
+      // Clear ALL auth-related data
+      await AsyncStorage.multiRemove([
+        PENDING_EMAIL_KEY,
+        PENDING_NAME_KEY,
+        'offline_user_data',
+        'offline_user_profile',
+        'offline_auth_last_sync',
+        'pending_magic_link',
+        'offline_auth_token'
+      ]);
+      console.log('All auth data cleared');
+      
+      // Also clear any remaining offline auth state
+      await clearOfflineAuth();
+      
+      // Force a longer delay to ensure all state updates are processed
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Don't navigate here - let the main navigation logic handle it
+      console.log('Logout completed, waiting for navigation logic');
+      
       return { success: true };
     } catch (error: any) {
+      console.error('Logout error:', error);
+      return { success: false, error: error.message };
+    }
+  };
+
+  const clearOfflineAuth = async () => {
+    try {
+      // Clear all offline authentication data
+      await AsyncStorage.multiRemove([
+        'offline_user_data',
+        'offline_user_profile',
+        'offline_auth_last_sync',
+        'pending_magic_link',
+        PENDING_EMAIL_KEY,
+        PENDING_NAME_KEY
+      ]);
+      
+      return { success: true };
+    } catch (error: any) {
+      console.error('Error clearing offline auth:', error);
       return { success: false, error: error.message };
     }
   };
@@ -371,5 +545,10 @@ export function useAuth() {
     signInWithApple,
     deleteAccount,
     logout,
+    createOfflineUser,
+    completeOfflineUserVerification,
+    hasPendingMagicLink,
+    getOfflineUser,
+    clearOfflineAuth,
   };
 } 

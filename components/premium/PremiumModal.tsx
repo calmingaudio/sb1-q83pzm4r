@@ -1,16 +1,22 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform, ScrollView, Modal } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { X, Crown, Check, Sparkles } from 'lucide-react-native';
+import * as Haptics from 'expo-haptics';
+import { X, Crown, Check, WifiOff } from 'lucide-react-native';
 import { useTheme } from '@/components/ThemeProvider';
+import { usePremium } from '@/context/premiumContext';
+import { useOfflineContext } from '@/components/OfflineProvider';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 
 interface Props {
   visible: boolean;
   onClose: () => void;
-  onPurchase: (planId: 'monthly' | 'annual') => void;
-  onRestore: () => void;
+  // Allow callers that return boolean (success) or void for compatibility
+  onPurchase: (planId: 'monthly' | 'annual') => Promise<boolean | void> | boolean | void;
+  onStartTrial: (planId?: 'monthly' | 'annual') => Promise<boolean | void> | boolean | void;
+  onRestore: () => Promise<boolean | void> | boolean | void;
   isLoading?: boolean;
+  isTrialEligible?: boolean;
 }
 
 const premiumFeatures = [
@@ -46,9 +52,50 @@ const premiumFeatures = [
   }
 ];
 
-export default function PremiumModal({ visible, onClose, onPurchase, onRestore, isLoading = false }: Props) {
+export default function PremiumModal({ visible, onClose, onPurchase, onRestore, isLoading = false, isTrialEligible = true }: Props) {
   const { colors } = useTheme();
+  const { isPremium } = usePremium();
+  const { isOnline } = useOfflineContext();
+  const [purchaseSuccess, setPurchaseSuccess] = React.useState(false);
   const [selectedPlan, setSelectedPlan] = React.useState<'monthly' | 'annual'>('annual');
+  const [isProcessing, setIsProcessing] = React.useState(false);
+  const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
+
+  const handlePurchase = async () => {
+    try {
+      setIsProcessing(true);
+      setErrorMessage(null);
+      const result = await onPurchase(selectedPlan);
+      const success = result === true;
+      if (success) {
+        setPurchaseSuccess(true);
+        try { await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); } catch {}
+        setTimeout(() => {
+          setPurchaseSuccess(false);
+          onClose();
+        }, 600);
+      } else {
+        // For new users, don't auto-restore since they have no purchases
+        // Just show a helpful error message
+        setErrorMessage("Unable to process purchase. Please check your internet connection and try again.");
+      }
+    } catch (error) {
+      console.error('Purchase error:', error);
+      setErrorMessage('An unexpected error occurred during purchase. Please try again.');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Fallback: if context flips to premium (e.g., delayed listener), close modal
+  React.useEffect(() => {
+    if (!visible) return;
+    if (isPremium) {
+      // give a tiny delay to allow success animation to show if any
+      const t = setTimeout(() => onClose(), 300);
+      return () => clearTimeout(t);
+    }
+  }, [visible, isPremium, onClose]);
 
   const styles = createStyles(colors);
 
@@ -71,7 +118,10 @@ export default function PremiumModal({ visible, onClose, onPurchase, onRestore, 
             </View>
 
             {/* Premium Badge */}
-            <View style={styles.premiumBadge}>
+            <Animated.View 
+              style={styles.premiumBadge}
+              entering={FadeInDown.delay(200).springify()}
+            >
               <LinearGradient
                 colors={['#FFD700', '#FFA500', '#FF6B35']}
                 style={styles.premiumBadgeGradient}
@@ -81,27 +131,36 @@ export default function PremiumModal({ visible, onClose, onPurchase, onRestore, 
                 <Crown size={32} color="#ffffff" strokeWidth={2.5} />
                 <Text style={styles.premiumBadgeText}>SkyCalm Premium</Text>
               </LinearGradient>
-            </View>
+            </Animated.View>
 
             {/* Title */}
-            <View style={styles.titleContainer}>
-              <Text style={styles.title}>Unlock Advanced Breathing Techniques</Text>
-              <Text style={styles.subtitle}>
-                Access professional-grade breathing methods designed specifically for flying anxiety relief.
+            <Animated.View 
+              style={styles.titleContainer}
+              entering={FadeInDown.delay(300).springify()}
+            >
+              <Text style={styles.title}>
+                {isTrialEligible ? 'Try Premium Free for 7 Days' : 'Unlock Advanced Breathing Techniques and Tailored Meditations'}
               </Text>
-            </View>
+              <Text style={styles.subtitle}>
+                {isTrialEligible 
+                  ? 'Start your free trial and access professional-grade breathing methods designed specifically for flying anxiety relief.'
+                  : 'Access professional-grade breathing methods and guided meditations designed specifically for flying anxiety relief.'
+                }
+              </Text>
+            </Animated.View>
 
             {/* Pricing Plans */}
-            <View style={styles.pricingPlansContainer}>
+            <Animated.View 
+              style={styles.pricingPlansContainer}
+              entering={FadeInDown.delay(400).springify()}
+            >
               <Text style={styles.pricingTitle}>Choose Your Plan</Text>
               
               {/* Annual Plan */}
               <TouchableOpacity
-                style={[
-                  styles.pricingPlan,
-                  selectedPlan === 'annual' && styles.selectedPlan
-                ]}
-                onPress={() => setSelectedPlan('annual')}
+                activeOpacity={0.9}
+                style={[styles.pricingPlan, selectedPlan === 'annual' && styles.selectedPlan]}
+                onPress={async () => { await Haptics.selectionAsync(); setSelectedPlan('annual'); }}
               >
                 <LinearGradient
                   colors={selectedPlan === 'annual' ? ['#6366f1', '#8b5cf6'] : [colors.card, colors.card]}
@@ -147,11 +206,9 @@ export default function PremiumModal({ visible, onClose, onPurchase, onRestore, 
 
               {/* Monthly Plan */}
               <TouchableOpacity
-                style={[
-                  styles.pricingPlan,
-                  selectedPlan === 'monthly' && styles.selectedPlan
-                ]}
-                onPress={() => setSelectedPlan('monthly')}
+                activeOpacity={0.9}
+                style={[styles.pricingPlan, selectedPlan === 'monthly' && styles.selectedPlan]}
+                onPress={async () => { await Haptics.selectionAsync(); setSelectedPlan('monthly'); }}
               >
                 <LinearGradient
                   colors={selectedPlan === 'monthly' ? ['#6366f1', '#8b5cf6'] : [colors.card, colors.card]}
@@ -191,44 +248,133 @@ export default function PremiumModal({ visible, onClose, onPurchase, onRestore, 
                   </Text>
                 </LinearGradient>
               </TouchableOpacity>
+            </Animated.View>
+
+            {/* Features List */}
+            <View style={styles.featuresContainer}>
+              {premiumFeatures.map((feature, index) => (
+                <Animated.View 
+                  key={index}
+                  style={styles.featureItem}
+                  entering={FadeInDown.delay(500 + index * 50).springify()}
+                >
+                  <View style={styles.featureIcon}>
+                    <Text style={styles.featureEmoji}>{feature.icon}</Text>
+                  </View>
+                  <View style={styles.featureContent}>
+                    <Text style={styles.featureTitle}>{feature.title}</Text>
+                    <Text style={styles.featureDescription}>{feature.description}</Text>
+                  </View>
+                  <View style={styles.featureCheck}>
+                    <Check size={16} color={colors.success} strokeWidth={2.5} />
+                  </View>
+                </Animated.View>
+              ))}
             </View>
 
-            {/* Action Buttons */}
-            <View style={styles.actionsContainer}>
+            {/* Additional Benefits */}
+            <Animated.View 
+              style={styles.additionalBenefits}
+              entering={FadeInDown.delay(800).springify()}
+            >
+              <Text style={styles.additionalBenefitsTitle}>Plus Premium Benefits</Text>
+              <View style={styles.benefitsList}>
+                <View style={styles.benefitItem}>
+                  <Check size={14} color={colors.success} strokeWidth={2.5} />
+                  <Text style={styles.benefitText}>Offline access to all premium content</Text>
+                </View>
+                <View style={styles.benefitItem}>
+                  <Check size={14} color={colors.success} strokeWidth={2.5} />
+                  <Text style={styles.benefitText}>Future premium features included</Text>
+                </View>
+                <View style={styles.benefitItem}>
+                  <Check size={14} color={colors.success} strokeWidth={2.5} />
+                  <Text style={styles.benefitText}>Priority customer support</Text>
+                </View>
+                <View style={styles.benefitItem}>
+                  <Check size={14} color={colors.success} strokeWidth={2.5} />
+                  <Text style={styles.benefitText}>Ad-free experience</Text>
+                </View>
+              </View>
+            </Animated.View>
+
+            {/* Action Button */}
+            <Animated.View 
+              style={styles.actionsContainer}
+              entering={FadeInDown.delay(900).springify()}
+            >
+              {/* Continue CTA (Apple applies intro offer automatically if eligible) */}
               <TouchableOpacity 
                 style={styles.purchaseButton}
-                onPress={() => onPurchase(selectedPlan)}
-                disabled={isLoading}
+                onPress={handlePurchase}
+                disabled={isLoading || purchaseSuccess || isProcessing || !isOnline}
               >
                 <LinearGradient
-                  colors={['#FFD700', '#FFA500']}
+                  colors={purchaseSuccess ? ['#10b981', '#059669'] : isProcessing ? ['#6b7280', '#9ca3af'] : ['#FFD700', '#FFA500']}
                   style={styles.purchaseButtonGradient}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                 >
-                  <Crown size={20} color="#ffffff" strokeWidth={2.5} />
+                  {purchaseSuccess ? (
+                    <Animated.View entering={FadeIn.duration(300)}>
+                      <Text style={[styles.purchaseButtonText, { fontSize: 24 }]}>✓</Text>
+                    </Animated.View>
+                  ) : (
+                    <Crown size={20} color="#ffffff" strokeWidth={2.5} />
+                  )}
                   <Text style={styles.purchaseButtonText}>
-                    {isLoading ? 'Processing...' : `Start ${selectedPlan === 'annual' ? 'Annual' : 'Monthly'} Plan`}
+                    {purchaseSuccess ? 'Success!' : isLoading || isProcessing ? 'Processing...' : 'Continue'}
                   </Text>
                 </LinearGradient>
               </TouchableOpacity>
 
-              <TouchableOpacity 
-                style={styles.restoreButton}
-                onPress={onRestore}
-                disabled={isLoading}
-              >
-                <Text style={styles.restoreButtonText}>Restore Purchases</Text>
-              </TouchableOpacity>
-            </View>
+              {!purchaseSuccess && (
+                <TouchableOpacity 
+                  style={styles.restoreButton}
+                  disabled={!isOnline || isLoading}
+                  onPress={async () => {
+                    try {
+                      setIsProcessing(true);
+                      const restored = await onRestore();
+                      const ok = restored === true;
+                      if (ok) {
+                        try { await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); } catch {}
+                        setTimeout(() => {
+                          onClose();
+                        }, 500);
+                      }
+                    } finally {
+                      setIsProcessing(false);
+                    }
+                  }}
+                >
+                  <Text style={styles.restoreButtonText}>Restore Purchases</Text>
+                </TouchableOpacity>
+              )}
+            </Animated.View>
 
             {/* Legal Text */}
-            <View style={styles.legalContainer}>
+            <Animated.View 
+              style={styles.legalContainer}
+              entering={FadeInDown.delay(1000).springify()}
+            >
+              {!isOnline && (
+                <View style={styles.offlineWarning}>
+                  <WifiOff size={16} color={colors.text} strokeWidth={2} />
+                  <Text style={styles.offlineText}>Purchases require an internet connection</Text>
+                </View>
+              )}
+              {errorMessage && (
+                <View style={styles.errorBanner}>
+                  <Text style={styles.errorBannerText}>{errorMessage}</Text>
+                </View>
+              )}
               <Text style={styles.legalText}>
                 Subscription automatically renews unless auto-renew is turned off at least 24 hours 
-                before the end of the current period.
+                before the end of the current period. Payment will be charged to your account at 
+                confirmation of purchase.
               </Text>
-            </View>
+            </Animated.View>
           </ScrollView>
         </View>
       </View>
@@ -511,6 +657,26 @@ const createStyles = (colors: any) => StyleSheet.create({
     paddingHorizontal: 20,
     marginBottom: 20,
   },
+  secondaryButton: {
+    backgroundColor: '#6366f1', // Update background for secondary state
+    ...Platform.select({
+      ios: {
+        shadowColor: '#6366f1',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 3,
+      },
+      web: {
+        shadowColor: '#6366f1',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 4,
+      },
+    }),
+  },
   purchaseButton: {
     borderRadius: 16,
     overflow: 'hidden',
@@ -542,6 +708,20 @@ const createStyles = (colors: any) => StyleSheet.create({
     paddingHorizontal: 24,
     gap: 8,
   },
+  selectedBadge: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    backgroundColor: 'rgba(0,0,0,0.25)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  selectedBadgeText: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 12,
+    color: '#ffffff',
+  },
   purchaseButtonText: {
     fontFamily: 'Inter-SemiBold',
     fontSize: 16,
@@ -566,5 +746,39 @@ const createStyles = (colors: any) => StyleSheet.create({
     color: colors.textTertiary,
     textAlign: 'center',
     lineHeight: 16,
+  },
+  offlineWarning: {
+    backgroundColor: '#fef3c7',
+    borderColor: '#f59e0b',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  offlineText: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 13,
+    color: '#d97706',
+    textAlign: 'center',
+  },
+  errorBanner: {
+    backgroundColor: '#fee2e2',
+    borderColor: '#ef4444',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 10,
+  },
+  errorBannerText: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 13,
+    color: '#b91c1c',
+    textAlign: 'center',
   },
 });

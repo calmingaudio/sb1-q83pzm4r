@@ -36,3 +36,6 @@ yarn-error.*
 
 /ios
 /android
+
+/.repomix*GoogleService-Info.plist
+google-services.json

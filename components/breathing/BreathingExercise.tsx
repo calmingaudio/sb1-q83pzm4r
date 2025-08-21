@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ArrowLeft } from 'lucide-react-native';
 import Colors from '@/constants/Colors';
@@ -30,8 +31,11 @@ export default function BreathingExercise({ pattern, onClose }: Props) {
   const triggerVibration = () => {
     if (Platform.OS === 'web' && currentPhase === 'exhale') {
       try {
-        // Gentle vibration pattern for exhale
-        window.navigator.vibrate([100, 30, 100]);
+        // Gentle vibration pattern for exhale - only on web
+        const nav = (globalThis as any).navigator;
+        if (nav && nav.vibrate) {
+          nav.vibrate([100, 30, 100]);
+        }
       } catch (error) {
         console.log('Vibration not supported');
       }
@@ -126,18 +130,24 @@ export default function BreathingExercise({ pattern, onClose }: Props) {
   });
 
   return (
-    <View style={styles.container}>
-      <LinearGradient
-        colors={Colors.light.gradient.primary}
-        style={styles.header}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-      >
-        <TouchableOpacity onPress={onClose} style={styles.backButton}>
-          <ArrowLeft size={24} color="#ffffff" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>{pattern.name}</Text>
-      </LinearGradient>
+    <SafeAreaView style={styles.container} edges={["left", "right"]}>
+      {/* Modern Header */}
+      <View style={styles.header}>
+        <LinearGradient
+          colors={Colors.light.gradient.primary as any}
+          style={styles.headerGradient}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        >
+          <View style={styles.headerContent}>
+            <TouchableOpacity onPress={onClose} style={styles.backButton}>
+              <ArrowLeft size={24} color="#ffffff" />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>{pattern.name}</Text>
+            <View style={styles.spacer} />
+          </View>
+        </LinearGradient>
+      </View>
 
       <View style={styles.content}>
         <View style={styles.circleContainer}>
@@ -160,7 +170,7 @@ export default function BreathingExercise({ pattern, onClose }: Props) {
           </Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -170,28 +180,49 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.light.background,
   },
   header: {
-    padding: 20,
+    backgroundColor: Colors.light.background,
+  },
+  headerGradient: {
+    paddingHorizontal: 24,
+    paddingVertical: 24,
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+  },
+  headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 20,
   },
   backButton: {
-    marginRight: 16,
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   headerTitle: {
     fontFamily: 'Inter-SemiBold',
     fontSize: 20,
     color: '#ffffff',
+    textAlign: 'center',
+    flex: 1,
+  },
+  spacer: {
+    width: 40, // Same width as back button for perfect centering
   },
   content: {
     flex: 1,
-    justifyContent: 'center',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingTop: 100,
+    paddingBottom: Platform.OS === 'ios' ? 120 : 100, // Account for tab bar height
   },
   circleContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    maxHeight: '70%', // Limit height to prevent overflow
   },
   breathCircle: {
     backgroundColor: Colors.light.primaryLight,
@@ -200,16 +231,16 @@ const styles = StyleSheet.create({
   },
   phaseText: {
     fontFamily: 'Inter-SemiBold',
-    fontSize: 32,
+    fontSize: 28,
     color: Colors.light.text,
-    marginTop: 40,
+    marginTop: 30,
     textAlign: 'center',
   },
   timerText: {
     fontFamily: 'Inter-Regular',
-    fontSize: 72,
+    fontSize: 64,
     color: Colors.light.primary,
-    marginTop: 20,
+    marginTop: 16,
   },
   cycleText: {
     fontFamily: 'Inter-Regular',
@@ -222,7 +253,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 48,
     paddingVertical: 16,
     borderRadius: 30,
-    marginBottom: 40,
+    marginTop: 20,
+    ...Platform.select({
+      ios: {
+        shadowColor: Colors.light.text,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
   },
   playButtonText: {
     fontFamily: 'Inter-SemiBold',

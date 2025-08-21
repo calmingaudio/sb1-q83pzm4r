@@ -35,7 +35,7 @@ import Colors from "@/constants/Colors";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import Animated, { FadeInDown, FadeInRight, FadeInUp } from "react-native-reanimated";
-import { useAuthentication } from "@/hooks/useAuthentication";
+import { useOfflineContext } from "@/components/OfflineProvider";
 import { useDailyTip } from "@/hooks/useDailyTip";
 import { useAviationStats } from '@/hooks/useAviationStats';
 import { useTheme } from '@/components/ThemeProvider';
@@ -59,13 +59,13 @@ interface QuickAction {
 
 export default function HomeScreen() {
   const { colors } = useTheme();
-  const { profile } = useAuthentication();
+  const { currentUser } = useOfflineContext();
   const dailyTip = useDailyTip();
   const greeting = getGreeting();
   const insets = useSafeAreaInsets();
   const { currentStat, isLoading, getNextStat } = useAviationStats();
 
-  const firstName = profile?.firstName || "Traveler";
+  const firstName = currentUser?.displayName?.split(' ')[0] || "Traveler";
 
   function getGreeting(): string {
     const hour = new Date().getHours();
@@ -205,7 +205,7 @@ export default function HomeScreen() {
             </View>
             <TouchableOpacity 
               style={styles.settingsButton}
-              onPress={() => router.push('/profile')}
+              onPress={handleSettingsPress}
             >
               <Settings size={22} color={colors.textSecondary} strokeWidth={2} />
             </TouchableOpacity>
@@ -248,7 +248,7 @@ export default function HomeScreen() {
                 icon: Wind, 
                 text: 'Breathing Exercise',
                 subtitle: 'Calm your mind',
-                gradient: colors.gradient?.calm || colors.gradient?.primary || ['#6366f1', '#8b5cf6'],
+                gradient: (colors.gradient?.primary || ['#6366f1', '#8b5cf6']) as unknown as readonly [string, string, ...string[]],
                 delay: 400,
                 action: 'breathe'
               },
@@ -256,7 +256,7 @@ export default function HomeScreen() {
                 icon: Heart, 
                 text: 'Getting Ready Meditations',
                 subtitle: 'Prepare for your journey',
-                gradient: ['#f59e0b', '#f97316'],
+                gradient: ['#f59e0b', '#f97316'] as readonly [string, string, ...string[]],
                 delay: 450,
                 action: 'getting-ready-meditation'
               },
@@ -264,7 +264,7 @@ export default function HomeScreen() {
                 icon: Brain, 
                 text: 'Pre-Flight Calm Meditations',
                 subtitle: 'Guided meditation',
-                gradient: ['#8b5cf6', '#a855f7'],
+                gradient: ['#8b5cf6', '#a855f7'] as readonly [string, string, ...string[]],
                 delay: 500,
                 action: 'pre-flight-meditation'
               },
@@ -272,7 +272,7 @@ export default function HomeScreen() {
                 icon: Plane, 
                 text: 'Onboard Ease Meditations',
                 subtitle: 'Peaceful journey',
-                gradient: ['#06b6d4', '#22d3ee'],
+                gradient: ['#06b6d4', '#22d3ee'] as readonly [string, string, ...string[]],
                 delay: 550,
                 action: 'in-flight-meditation'
               },
@@ -280,7 +280,7 @@ export default function HomeScreen() {
                 icon: Shield, 
                 text: 'Emergency SOS',
                 subtitle: 'Instant relief',
-                gradient: ['#ef4444', '#f87171'],
+                gradient: ['#ef4444', '#f87171'] as readonly [string, string, ...string[]],
                 delay: 600,
                 action: 'sos'
               },
@@ -288,7 +288,7 @@ export default function HomeScreen() {
                 icon: BookOpen, 
                 text: 'Flight Q&A\'s',
                 subtitle: 'Understanding flight',
-                gradient: colors.gradient?.energy || colors.gradient?.accent || ['#10b981', '#34d399'],
+                gradient: (colors.gradient?.accent || ['#10b981', '#34d399']) as unknown as readonly [string, string, ...string[]],
                 delay: 650,
                 action: 'learn'
               },
@@ -296,7 +296,7 @@ export default function HomeScreen() {
                 icon: PenTool, 
                 text: 'Journal Entry',
                 subtitle: 'Track your progress',
-                gradient: colors.gradient?.warm || colors.gradient?.secondary || ['#9333ea', '#a855f7'],
+                gradient: (colors.gradient?.secondary || ['#9333ea', '#a855f7']) as unknown as readonly [string, string, ...string[]],
                 delay: 700,
                 action: 'journal'
               },
@@ -304,7 +304,7 @@ export default function HomeScreen() {
                 icon: Volume2, 
                 text: 'Nature Sounds',
                 subtitle: 'Calming natural audio',
-                gradient: ['#10b981', '#34d399'],
+                gradient: ['#10b981', '#34d399'] as readonly [string, string, ...string[]],
                 delay: 750,
                 action: 'nature-sounds'
               },
@@ -312,7 +312,7 @@ export default function HomeScreen() {
                 icon: Music, 
                 text: 'Relaxing Music',
                 subtitle: 'Peaceful melodies',
-                gradient: ['#8b5cf6', '#c084fc'],
+                gradient: ['#8b5cf6', '#c084fc'] as readonly [string, string, ...string[]],
                 delay: 800,
                 action: 'relaxing-music'
               },

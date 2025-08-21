@@ -24,13 +24,16 @@ import {
 import BackButton from "@/components/BackButton";
 import Colors from "@/constants/Colors";
 import { useAuth } from "@/context/authContext";
+import { useOfflineContext } from "@/components/OfflineProvider";
 import { router } from "expo-router";
 
 export default function ProfileScreen() {
-  const { logout, deleteAccount } = useAuth();
+  const { logout, deleteAccount, hasPendingMagicLink, sendMagicLink, getOfflineUser } = useAuth();
+  const { isOnline, shouldUseOfflineMode, currentUser } = useOfflineContext();
   const [offlineAccessEnabled, setOfflineAccessEnabled] = useState(true);
   const [hapticFeedbackEnabled, setHapticFeedbackEnabled] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isResendingMagicLink, setIsResendingMagicLink] = useState(false);
 
   const openURL = async (url: string) => {
     const supported = await Linking.canOpenURL(url);
@@ -69,6 +72,31 @@ export default function ProfileScreen() {
         },
       ]
     );
+  };
+
+  const handleResendMagicLink = async () => {
+    if (!currentUser?.email) {
+      Alert.alert('Error', 'No email found for user');
+      return;
+    }
+
+    setIsResendingMagicLink(true);
+    try {
+      const result = await sendMagicLink(currentUser.email, currentUser.displayName);
+      if (result.success) {
+        Alert.alert(
+          'Magic Link Sent',
+          'Check your email and click the link to complete your account verification.',
+          [{ text: 'OK' }]
+        );
+      } else {
+        Alert.alert('Error', result.error || 'Failed to send magic link');
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to send magic link');
+    } finally {
+      setIsResendingMagicLink(false);
+    }
   };
 
   return (
@@ -133,6 +161,55 @@ export default function ProfileScreen() {
             />
           </View>
         </View>
+
+        {/* Authentication Status Section */}
+        {currentUser && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Account</Text>
+            
+            <View style={styles.settingItem}>
+              <View style={styles.settingInfo}>
+                <View style={styles.iconContainer}>
+                  <ShieldCheck size={22} color={Colors.light.primary} />
+                </View>
+                <View style={styles.settingTextContainer}>
+                  <Text style={styles.settingTitle}>
+                    {currentUser.emailVerified ? 'Email Verified' : 'Email Not Verified'}
+                  </Text>
+                  <Text style={styles.settingDescription}>
+                    {currentUser.emailVerified 
+                      ? 'Your account is fully verified'
+                      : 'Complete verification to sync your data'
+                    }
+                  </Text>
+                </View>
+              </View>
+              {currentUser.emailVerified ? (
+                <View style={styles.verifiedBadge}>
+                  <Text style={styles.verifiedText}>✓</Text>
+                </View>
+              ) : (
+                <TouchableOpacity 
+                  style={styles.verifyButton}
+                  onPress={handleResendMagicLink}
+                  disabled={isResendingMagicLink || !isOnline}
+                >
+                  <Text style={styles.verifyButtonText}>
+                    {isResendingMagicLink ? 'Sending...' : 'Verify'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {shouldUseOfflineMode && !currentUser.emailVerified && (
+              <View style={styles.offlineNotice}>
+                <Text style={styles.offlineNoticeText}>
+                  You're currently offline. Connect to the internet to complete email verification.
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
 
         {/* About Section */}
         <View style={styles.section}>
@@ -199,14 +276,28 @@ export default function ProfileScreen() {
 
         {/* Sign Out Section */}
         <View style={styles.signOutSection}>
-          <TouchableOpacity style={styles.signOutButton} onPress={logout}>
+          <TouchableOpacity 
+            style={styles.signOutButton} 
+            onPress={async () => {
+              try {
+                const result = await logout();
+                if (!result.success) {
+                  console.error('Logout failed:', result.error);
+                  Alert.alert('Error', 'Failed to sign out. Please try again.');
+                }
+              } catch (error) {
+                console.error('Logout error:', error);
+                Alert.alert('Error', 'An unexpected error occurred while signing out.');
+              }
+            }}
+          >
             <LogOut size={18} color="#ef4444" />
             <Text style={styles.signOutButtonText}>Sign Out</Text>
           </TouchableOpacity>
         </View>
 
         <View style={styles.versionContainer}>
-          <Text style={styles.versionText}>Version 1.0.0</Text>
+          <Text style={styles.versionText}>Version 2.0.1</Text>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -337,5 +428,43 @@ const styles = StyleSheet.create({
     fontFamily: "Inter-Regular",
     fontSize: 14,
     color: Colors.light.textSecondary,
+  },
+  // Authentication status styles
+  verifiedBadge: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "#10b981",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  verifiedText: {
+    color: "#ffffff",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  verifyButton: {
+    backgroundColor: Colors.light.primary,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  verifyButtonText: {
+    color: "#ffffff",
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  offlineNotice: {
+    backgroundColor: "#fef3c7",
+    padding: 12,
+    borderRadius: 8,
+    marginHorizontal: 16,
+    marginTop: 8,
+  },
+  offlineNoticeText: {
+    fontFamily: "Inter-Regular",
+    fontSize: 14,
+    color: "#92400e",
+    textAlign: "center",
   },
 });

@@ -10,11 +10,11 @@ import { useOfflineContext } from '@/components/OfflineProvider';
 import { router } from 'expo-router';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
-import { faGoogle, faApple } from '@fortawesome/free-brands-svg-icons';
+import { faApple } from '@fortawesome/free-brands-svg-icons';
 
 export default function SignUpScreen() {
   const { colors } = useTheme();
-  const { signInWithGoogle, sendMagicLink, signInWithApple, signInWithEmail, signUpWithEmail } = useAuth();
+  const { sendMagicLink, signInWithApple, signInWithEmail, signUpWithEmail, createOfflineUser } = useAuth();
   const { isOnline, shouldUseOfflineMode, createMockOfflineUser } = useOfflineContext();
   
   const [name, setName] = useState('');
@@ -50,6 +50,20 @@ export default function SignUpScreen() {
     setErrors({});
     
     try {
+      // Check if we're in offline mode
+      if (shouldUseOfflineMode) {
+        // Create offline user for immediate access
+        const result = await createOfflineUser(email, name.trim());
+        if (result.success) {
+          // Navigate to main app immediately
+          router.replace('/(tabs)');
+        } else {
+          setErrors({ general: result.error || 'Failed to create offline user' });
+        }
+        return;
+      }
+      
+      // Online mode - send magic link
       const result = await sendMagicLink(email, name.trim());
       if (result.success) {
         router.push({
@@ -66,6 +80,7 @@ export default function SignUpScreen() {
     }
   };
 
+  /*
   const handleGoogleSignIn = async () => {
     Alert.alert(
       'Google Sign In Setup Required',
@@ -76,6 +91,7 @@ export default function SignUpScreen() {
       ]
     );
   };
+  */
 
   const handleAppleSignIn = async () => {
     try {
@@ -296,7 +312,7 @@ export default function SignUpScreen() {
 
             {/* Social Sign In */}
             <View style={styles.socialButtons}>
-              {/* Google Sign In */}
+              {/** Google Sign In
               <TouchableOpacity style={styles.googleButton} onPress={handleGoogleSignIn}>
                 <LinearGradient
                   colors={['#ffffff', '#f8f9fa']}
@@ -308,6 +324,7 @@ export default function SignUpScreen() {
                   <Text style={styles.googleButtonText}>Google</Text>
                 </LinearGradient>
               </TouchableOpacity>
+              */}
 
               {/* Apple Sign In - Enhanced Design */}
               {Platform.OS === 'ios' && (

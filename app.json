@@ -2,10 +2,10 @@
   "expo": {
     "name": "SkyCalm",
     "slug": "bolt-expo-nativewind",
-    "version": "1.0.0",
+    "version": "2.0.3",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "myapp",
+    "scheme": "skycalm",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": false,
     "jsEngine": "jsc",
@@ -13,7 +13,7 @@
       "enabled": true
     },
     "ios": {
-      "buildNumber": "1.0.6",
+      "buildNumber": "2.3.2",
       "supportsTablet": true,
       "bundleIdentifier": "com.skycalm.app",
       "googleServicesFile": "./GoogleService-Info.plist",
@@ -21,13 +21,17 @@
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "This app uses the camera for optional in-app features like photo capture or barcode scanning.",
-        "UIBackgroundModes": ["audio"],
+        "UIBackgroundModes": [
+          "audio"
+        ],
         "NSMicrophoneUsageDescription": "This app does not use the microphone but requires the permission for audio playback."
       }
     },
     "android": {
       "package": "com.calmingaudio.skycalm",
-      "permissions": ["android.permission.MODIFY_AUDIO_SETTINGS"]
+      "permissions": [
+        "android.permission.MODIFY_AUDIO_SETTINGS"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -44,7 +48,9 @@
       "typedRoutes": true
     },
     "extra": {
-      "router": {},
+      "router": {
+        "origin": false
+      },
       "eas": {
         "projectId": "3df60521-cafe-4799-8291-6824e6af19ef"
       }

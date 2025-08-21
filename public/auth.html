@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SkyCalm - Sign In</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .container {
+            background: white;
+            border-radius: 16px;
+            padding: 40px;
+            text-align: center;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            max-width: 400px;
+            width: 90%;
+        }
+        .logo {
+            font-size: 32px;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 20px;
+        }
+        .title {
+            font-size: 24px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 16px;
+        }
+        .subtitle {
+            font-size: 16px;
+            color: #666;
+            margin-bottom: 32px;
+            line-height: 1.5;
+        }
+        .button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 16px 32px;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .button:hover {
+            transform: translateY(-2px);
+        }
+        .loading {
+            display: none;
+            margin-top: 20px;
+        }
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 16px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">SkyCalm</div>
+        <h1 class="title">Sign In to SkyCalm</h1>
+        <p class="subtitle">
+            Click the button below to open SkyCalm and complete your sign-in.
+        </p>
+        
+        <button class="button" onclick="openApp()">
+            Open SkyCalm App
+        </button>
+        
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Opening SkyCalm...</p>
+            <p id="debug-info" style="font-size: 12px; color: #666; margin-top: 10px;"></p>
+        </div>
+    </div>
+
+    <script>
+        // Check if we're on a mobile device
+        function isMobile() {
+            return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        }
+
+        // Try to open the app
+        function openApp() {
+            const loading = document.getElementById('loading');
+            const button = document.querySelector('.button');
+            const debugInfo = document.getElementById('debug-info');
+            
+            loading.style.display = 'block';
+            button.style.display = 'none';
+            
+            // Get the current URL parameters (magic link data)
+            const currentUrl = window.location.href;
+            console.log('Current URL:', currentUrl);
+            
+            // Try to open the app using the deep link with the magic link URL
+            const appUrl = `skycalm://auth/verify?${window.location.search.substring(1)}`;
+            console.log('App URL:', appUrl);
+            
+            // Update debug info
+            debugInfo.innerHTML = `Attempting to open: ${appUrl}`;
+            
+            // For mobile devices, try to open the app
+            if (isMobile()) {
+                // Create a hidden iframe to trigger the app
+                const iframe = document.createElement('iframe');
+                iframe.style.display = 'none';
+                iframe.src = appUrl;
+                document.body.appendChild(iframe);
+                
+                // Also try window.location as a fallback
+                window.location.href = appUrl;
+                
+                // Set a timeout to redirect to app store if app doesn't open
+                setTimeout(() => {
+                    debugInfo.innerHTML += '<br>App not opened, redirecting to app store...';
+                    // If the app didn't open, redirect to app store
+                    if (navigator.userAgent.includes('iPhone') || navigator.userAgent.includes('iPad')) {
+                        window.location.href = 'https://apps.apple.com/app/skycalm';
+                    } else if (navigator.userAgent.includes('Android')) {
+                        window.location.href = 'https://play.google.com/store/apps/details?id=com.calmingaudio.skycalm';
+                    }
+                }, 3000);
+            } else {
+                // For desktop, show instructions
+                loading.innerHTML = `
+                    <p>Please open the SkyCalm app on your mobile device to complete sign-in.</p>
+                    <p>If you don't have the app installed, you can download it from the App Store or Google Play Store.</p>
+                    <p>Magic link URL: ${currentUrl}</p>
+                    <p>App URL: ${appUrl}</p>
+                `;
+            }
+        }
+
+        // Auto-trigger on page load for magic links
+        window.onload = function() {
+            // Check if this is a magic link (has query parameters)
+            if (window.location.search) {
+                console.log('Magic link detected, opening app...');
+                openApp();
+            }
+        };
+
+        // Also handle direct navigation to this page
+        if (document.readyState === 'complete') {
+            if (window.location.search) {
+                console.log('Magic link detected, opening app...');
+                openApp();
+            }
+        }
+    </script>
+</body>
+</html> 

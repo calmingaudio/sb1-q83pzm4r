@@ -8,6 +8,7 @@ import Animated, { FadeIn, FadeInDown, FadeInUp } from 'react-native-reanimated'
 import { usePremium } from '@/context/premiumContext';
 import { useOfflineMusic } from '@/hooks/useOfflineMusic';
 import { useAudioPlayer } from '@/hooks/useAudioPlayer';
+import { useOfflineContext } from '@/components/OfflineProvider';
 import PremiumBadge from '@/components/premium/PremiumBadge';
 import DownloadButton from '@/components/music/DownloadButton';
 import OfflineIndicator from '@/components/music/OfflineIndicator';
@@ -432,7 +433,17 @@ export default function MusicScreen() {
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
   const volumeSliderWidth = useRef(0);
 
-  const { isPremium, isLoading, showPremiumModal } = usePremium();
+  const { isLoading, showPremiumModal } = usePremium();
+  const { 
+    isOnline, 
+    isAuthenticated, 
+    canAccessOffline, 
+    offlineContentAvailable,
+    shouldUseOfflineMode,
+    currentUser,
+    isPremium, // Use offline-aware premium status
+    premiumFeatures
+  } = useOfflineContext();
   const { 
     downloadedTracks, 
     downloadProgress, 
@@ -442,7 +453,7 @@ export default function MusicScreen() {
     getTotalDownloadSize, 
     formatFileSize,
     clearAllDownloads 
-  } = useOfflineMusic();
+  } = useOfflineMusic(currentUser?.uid);
   const audioPlayer = useAudioPlayer();
 
   // Get URL parameters for deep linking
@@ -482,7 +493,10 @@ export default function MusicScreen() {
 
   const handleTrackSelect = async (track: Track) => {
     if (track.isPremium && !isPremium) {
-      showPremiumModal();
+      // Only show premium modal if online - offline users should retain their premium access
+      if (isOnline) {
+        showPremiumModal();
+      }
       return;
     }
 
@@ -512,14 +526,45 @@ export default function MusicScreen() {
   };
 
   const handleDownload = async (track: Track) => {
+    // Check authentication first
+    if (!isAuthenticated) {
+      Alert.alert(
+        'Authentication Required', 
+        'Please sign in to download tracks for offline listening.'
+      );
+      return;
+    }
+
+    // Check premium status for premium tracks
     if (track.isPremium && !isPremium) {
       showPremiumModal();
       return;
     }
 
+    // Check network connectivity for downloads
+    if (!isOnline && !shouldUseOfflineMode) {
+      Alert.alert(
+        'Network Required', 
+        'Downloads require an internet connection. Please check your network and try again.'
+      );
+      return;
+    }
+
+    // Check offline access permissions
+    if (!canAccessOffline) {
+      Alert.alert(
+        'Offline Access Unavailable', 
+        'Offline downloads are not available with your current account status.'
+      );
+      return;
+    }
+
     const success = await downloadTrack(track);
     if (!success) {
-      Alert.alert('Download Failed', 'Unable to download track. Please try again.');
+      Alert.alert(
+        'Download Failed', 
+        'Unable to download track. Please check your internet connection and try again.'
+      );
     }
   };
 
@@ -703,109 +748,119 @@ export default function MusicScreen() {
                 style={styles.nowPlayingOverlay}
               />
               
-              {/* Premium Badge for Premium Tracks */}
-              {currentTrack.isPremium && (
-                <View style={styles.nowPlayingPremiumBadge}>
-                  <PremiumBadge size="small" />
-                </View>
-              )}
-
-              {/* Download Button */}
-              <View style={styles.nowPlayingDownloadButton}>
-                <DownloadButton
-                  isDownloaded={isTrackDownloaded(currentTrack.id)}
-                  isDownloading={!!downloadProgress[currentTrack.id]?.isDownloading}
-                  progress={downloadProgress[currentTrack.id]?.progress || 0}
-                  onDownload={() => handleDownload(currentTrack)}
-                  onDelete={() => handleDeleteDownload(currentTrack.id)}
-                  size="large"
-                  disabled={currentTrack.isPremium && !isPremium}
-                />
-              </View>
-              
               <View style={styles.nowPlayingContent}>
-                <View style={styles.nowPlayingInfo}>
-                  <Text style={styles.nowPlayingTitle}>{currentTrack.title}</Text>
-                  <Text style={styles.nowPlayingArtist}>{currentTrack.artist}</Text>
-                  <Text style={styles.nowPlayingDescription}>{currentTrack.description}</Text>
-                </View>
-
-                {/* Progress Bar */}
-                <View style={styles.progressContainer}>
-                  <View style={styles.progressBar}>
-                    <View style={[styles.progressFill, { width: `${getProgressPercentage()}%` }]} />
+                <View style={styles.nowPlayingTopRow}>
+                  {/* Download Button */}
+                  <View style={styles.nowPlayingDownloadButton}>
+                    <DownloadButton
+                      isDownloaded={isTrackDownloaded(currentTrack.id)}
+                      isDownloading={!!downloadProgress[currentTrack.id]?.isDownloading}
+                      progress={downloadProgress[currentTrack.id]?.progress || 0}
+                      onDownload={() => handleDownload(currentTrack)}
+                      onDelete={() => handleDeleteDownload(currentTrack.id)}
+                      size="large"
+                      disabled={
+                        !isAuthenticated || 
+                        !canAccessOffline || 
+                        (currentTrack.isPremium && !isPremium) ||
+                        (!isOnline && !shouldUseOfflineMode && !isTrackDownloaded(currentTrack.id))
+                      }
+                    />
                   </View>
-                  <View style={styles.timeContainer}>
-                    <Text style={styles.timeText}>
-                      {audioPlayer.formatTime(audioPlayer.position)}
-                    </Text>
-                    <Text style={styles.timeText}>
-                      {currentTrack.duration === 'Loops' ? 'Loops' : audioPlayer.formatTime(audioPlayer.duration)}
-                    </Text>
-                  </View>
+                  
+                  {/* Premium Badge for Premium Tracks */}
+                  {currentTrack.isPremium && (
+                    <View style={styles.nowPlayingPremiumBadge}>
+                      <PremiumBadge size="small" />
+                    </View>
+                  )}
                 </View>
+                
+                {/* Bottom Content Wrapper */}
+                <View>
+                  <View style={styles.nowPlayingInfo}>
+                    <Text style={styles.nowPlayingTitle}>{currentTrack.title}</Text>
+                    <Text style={styles.nowPlayingArtist}>{currentTrack.artist}</Text>
+                    <Text style={styles.nowPlayingDescription}>{currentTrack.description}</Text>
+                  </View>
 
-                {/* Player Controls */}
-                <View style={styles.playerControls}>
-                  <TouchableOpacity 
-                    style={styles.controlButton}
-                    onPress={() => audioPlayer.seekTo(Math.max(0, audioPlayer.position - 10000))}
-                  >
-                    <SkipBack size={20} color="rgba(255,255,255,0.8)" strokeWidth={2} />
-                  </TouchableOpacity>
+                  {/* Progress Bar */}
+                  <View style={styles.progressContainer}>
+                    <View style={styles.progressBar}>
+                      <View style={[styles.progressFill, { width: `${getProgressPercentage()}%` }]} />
+                    </View>
+                    <View style={styles.timeContainer}>
+                      <Text style={styles.timeText}>
+                        {audioPlayer.formatTime(audioPlayer.position)}
+                      </Text>
+                      <Text style={styles.timeText}>
+                        {currentTrack.duration === 'Loops' ? 'Loops' : audioPlayer.formatTime(audioPlayer.duration)}
+                      </Text>
+                    </View>
+                  </View>
 
-                  <TouchableOpacity 
-                    style={styles.playButton} 
-                    onPress={() => handleTrackSelect(currentTrack)}
-                  >
-                    <LinearGradient
-                      colors={['rgba(255,255,255,0.9)', 'rgba(255,255,255,0.7)']}
-                      style={styles.playButtonGradient}
+                  {/* Player Controls */}
+                  <View style={styles.playerControls}>
+                    <TouchableOpacity 
+                      style={styles.controlButton}
+                      onPress={() => audioPlayer.seekTo(Math.max(0, audioPlayer.position - 10000))}
                     >
-                      {audioPlayer.isPlaying && audioPlayer.currentSoundId === currentTrack.id ? (
-                        <Pause size={32} color="#8b5cf6" strokeWidth={2.5} />
-                      ) : (
-                        <Play size={32} color="#8b5cf6" strokeWidth={2.5} />
-                      )}
-                    </LinearGradient>
-                  </TouchableOpacity>
+                      <SkipBack size={20} color="rgba(255,255,255,0.8)" strokeWidth={2} />
+                    </TouchableOpacity>
 
-                  <TouchableOpacity 
-                    style={styles.controlButton}
-                    onPress={() => audioPlayer.seekTo(Math.min(audioPlayer.duration, audioPlayer.position + 10000))}
-                  >
-                    <SkipForward size={20} color="rgba(255,255,255,0.8)" strokeWidth={2} />
-                  </TouchableOpacity>
-                </View>
+                    <TouchableOpacity 
+                      style={styles.playButton} 
+                      onPress={() => handleTrackSelect(currentTrack)}
+                    >
+                      <LinearGradient
+                        colors={['rgba(255,255,255,0.9)', 'rgba(255,255,255,0.7)']}
+                        style={styles.playButtonGradient}
+                      >
+                        {audioPlayer.isPlaying && audioPlayer.currentSoundId === currentTrack.id ? (
+                          <Pause size={32} color="#8b5cf6" strokeWidth={2.5} />
+                        ) : (
+                          <Play size={32} color="#8b5cf6" strokeWidth={2.5} />
+                        )}
+                      </LinearGradient>
+                    </TouchableOpacity>
 
-                {/* Volume Control */}
-                <View style={styles.volumeContainer}>
-                  <TouchableOpacity onPress={() => audioPlayer.setVolume(0)}>
-                    <VolumeX size={20} color="rgba(255,255,255,0.8)" strokeWidth={2} />
-                  </TouchableOpacity>
-                  <Pressable 
-                    style={styles.volumeSlider}
-                    onLayout={(event: LayoutChangeEvent) => {
-                      const { width } = event.nativeEvent.layout;
-                      volumeSliderWidth.current = width;
-                    }}
-                    onTouchStart={(event: GestureResponderEvent) => {
-                      const { locationX } = event.nativeEvent;
-                      const newVolume = Math.max(0, Math.min(1, locationX / volumeSliderWidth.current));
-                      audioPlayer.setVolume(newVolume);
-                    }}
-                    onTouchMove={(event: GestureResponderEvent) => {
-                      const { locationX } = event.nativeEvent;
-                      const newVolume = Math.max(0, Math.min(1, locationX / volumeSliderWidth.current));
-                      audioPlayer.setVolume(newVolume);
-                    }}
-                  >
-                    <View style={styles.volumeBackground} />
-                    <View style={[styles.volumeFill, { width: `${audioPlayer.volume * 100}%` }]} />
-                  </Pressable>
-                  <TouchableOpacity onPress={() => audioPlayer.setVolume(1)}>
-                    <Volume2 size={20} color="rgba(255,255,255,0.8)" strokeWidth={2} />
-                  </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={styles.controlButton}
+                      onPress={() => audioPlayer.seekTo(Math.min(audioPlayer.duration, audioPlayer.position + 10000))}
+                    >
+                      <SkipForward size={20} color="rgba(255,255,255,0.8)" strokeWidth={2} />
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Volume Control */}
+                  <View style={styles.volumeContainer}>
+                    <TouchableOpacity onPress={() => audioPlayer.setVolume(0)}>
+                      <VolumeX size={20} color="rgba(255,255,255,0.8)" strokeWidth={2} />
+                    </TouchableOpacity>
+                    <Pressable 
+                      style={styles.volumeSlider}
+                      onLayout={(event: LayoutChangeEvent) => {
+                        const { width } = event.nativeEvent.layout;
+                        volumeSliderWidth.current = width;
+                      }}
+                      onTouchStart={(event: GestureResponderEvent) => {
+                        const { locationX } = event.nativeEvent;
+                        const newVolume = Math.max(0, Math.min(1, locationX / volumeSliderWidth.current));
+                        audioPlayer.setVolume(newVolume);
+                      }}
+                      onTouchMove={(event: GestureResponderEvent) => {
+                        const { locationX } = event.nativeEvent;
+                        const newVolume = Math.max(0, Math.min(1, locationX / volumeSliderWidth.current));
+                        audioPlayer.setVolume(newVolume);
+                      }}
+                    >
+                      <View style={styles.volumeBackground} />
+                      <View style={[styles.volumeFill, { width: `${audioPlayer.volume * 100}%` }]} />
+                    </Pressable>
+                    <TouchableOpacity onPress={() => audioPlayer.setVolume(1)}>
+                      <Volume2 size={20} color="rgba(255,255,255,0.8)" strokeWidth={2} />
+                    </TouchableOpacity>
+                  </View>
                 </View>
               </View>
             </Animated.View>
@@ -956,7 +1011,12 @@ export default function MusicScreen() {
                         onDownload={() => handleDownload(track)}
                         onDelete={() => handleDeleteDownload(track.id)}
                         size="small"
-                        disabled={track.isPremium && !isPremium}
+                        disabled={
+                          !isAuthenticated || 
+                          !canAccessOffline || 
+                          (track.isPremium && !isPremium) ||
+                          (!isOnline && !shouldUseOfflineMode && !isTrackDownloaded(track.id))
+                        }
                       />
                       
                       {/* Playing Indicator */}
@@ -1111,7 +1171,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     paddingHorizontal: 20,
   },
   nowPlayingCard: {
-    height: 400,
+    height: 500,
     borderRadius: 24,
     overflow: 'hidden',
     marginBottom: 32,
@@ -1147,27 +1207,22 @@ const createStyles = (colors: any) => StyleSheet.create({
     right: 0,
     height: '100%',
   },
-  nowPlayingPremiumBadge: {
-    position: 'absolute',
-    top: 20,
-    right: 20,
-    zIndex: 1,
-  },
-  nowPlayingDownloadButton: {
-    position: 'absolute',
-    top: 20,
-    left: 20,
-    zIndex: 1,
-  },
-  nowPlayingContent: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
+  nowPlayingTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
     padding: 24,
+    paddingBottom: 0,
+  },
+  nowPlayingDownloadButton: {},
+  nowPlayingPremiumBadge: {},
+  nowPlayingContent: {
+    flex: 1,
+    justifyContent: 'space-between',
   },
   nowPlayingInfo: {
-    marginBottom: 24,
+    padding: 24,
+    paddingTop: 0,
   },
   nowPlayingTitle: {
     fontFamily: 'Inter-SemiBold',
@@ -1189,6 +1244,7 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   progressContainer: {
     marginBottom: 24,
+    marginHorizontal: 10,
   },
   progressBar: {
     height: 4,
@@ -1241,6 +1297,8 @@ const createStyles = (colors: any) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    marginHorizontal: 10,
+    marginBottom: 10,
   },
   volumeSlider: {
     flex: 1,
@@ -1352,11 +1410,13 @@ const createStyles = (colors: any) => StyleSheet.create({
       },
     }),
   },
-  trackItemActive: {
-    backgroundColor: colors.primaryLight + '20',
-    borderWidth: 1,
-    borderColor: colors.primary,
-  },
+     trackItemActive: {
+     backgroundColor: colors.primaryLight + '20',
+     borderWidth: 1,
+     borderColor: colors.primary,
+     shadowOpacity: 0,
+     elevation: 0,
+   },
   trackItemLocked: {
     borderWidth: 3,
     borderColor: '#FF6B35',

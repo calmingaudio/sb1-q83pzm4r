@@ -121,7 +121,7 @@ const alternateSlides = [
 
 export default function SOSScreen() {
   const { colors } = useTheme();
-  const { isPremium, purchasePlan, restorePurchases } = usePremium();
+  const { isPremium, purchasePlan, startTrial, restorePurchases, isTrialEligible } = usePremium();
   const audioPlayer = useAudioPlayer();
   const [showWelcome, setShowWelcome] = useState(true);
   const [showSlides, setShowSlides] = useState(false);
@@ -228,6 +228,18 @@ export default function SOSScreen() {
     }
   };
 
+  const handleStartTrial = async () => {
+    setIsProcessing(true);
+    try {
+      await startTrial();
+      setShowPremiumModal(false);
+    } catch (error) {
+      console.error('Error starting trial:', error);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const handleRestorePurchases = async () => {
     setIsProcessing(true);
     try {
@@ -249,8 +261,10 @@ export default function SOSScreen() {
           visible={showPremiumModal}
           onClose={() => setShowPremiumModal(false)}
           onPurchase={handlePremiumPurchase}
+          onStartTrial={handleStartTrial}
           onRestore={handleRestorePurchases}
           isLoading={isProcessing}
+          isTrialEligible={isTrialEligible}
         />
 
         <Animated.View 
@@ -332,8 +346,10 @@ export default function SOSScreen() {
         visible={showPremiumModal}
         onClose={() => setShowPremiumModal(false)}
         onPurchase={handlePremiumPurchase}
+        onStartTrial={handleStartTrial}
         onRestore={handleRestorePurchases}
         isLoading={isProcessing}
+        isTrialEligible={isTrialEligible}
       />
 
       <View style={styles.header}>
