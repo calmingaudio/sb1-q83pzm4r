@@ -405,7 +405,9 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
         setStatus(prev => ({
           ...prev,
           isPremium,
-          isLifetime: isPremium && !expiryDate,
+          // Only set lifetime if there is no plan (e.g. legacy, special offer)
+          // For subscriptions, it's premium but not "lifetime" without an expiry date
+          isLifetime: isPremium && !expiryDate && !plan,
           expiryDate: expiryDate || null,
           purchaseDate: purchaseTime,
           currentPlan: plan || null,

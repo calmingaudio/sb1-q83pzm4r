@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, ScrollView, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, ScrollView, Modal, Linking } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { X, Crown, Check, WifiOff } from 'lucide-react-native';
@@ -18,6 +18,16 @@ interface Props {
   isLoading?: boolean;
   isTrialEligible?: boolean;
 }
+
+const handleOpenURL = (url: string) => {
+  Linking.canOpenURL(url).then(supported => {
+    if (supported) {
+      Linking.openURL(url);
+    } else {
+      console.warn("Don't know how to open URI: " + url);
+    }
+  });
+};
 
 const premiumFeatures = [
   {
@@ -54,12 +64,15 @@ const premiumFeatures = [
 
 export default function PremiumModal({ visible, onClose, onPurchase, onRestore, isLoading = false, isTrialEligible = true }: Props) {
   const { colors } = useTheme();
-  const { isPremium } = usePremium();
+  const { isPremium, plans } = usePremium();
   const { isOnline } = useOfflineContext();
   const [purchaseSuccess, setPurchaseSuccess] = React.useState(false);
   const [selectedPlan, setSelectedPlan] = React.useState<'monthly' | 'annual'>('annual');
   const [isProcessing, setIsProcessing] = React.useState(false);
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
+
+  const annualPlan = React.useMemo(() => plans.find(p => p.id === 'annual'), [plans]);
+  const monthlyPlan = React.useMemo(() => plans.find(p => p.id === 'monthly'), [plans]);
 
   const handlePurchase = async () => {
     try {
@@ -177,7 +190,9 @@ export default function PremiumModal({ visible, onClose, onPurchase, onRestore, 
                         Annual Plan
                       </Text>
                       <View style={styles.savingsBadge}>
-                        <Text style={styles.savingsText}>Save 72%</Text>
+                        <Text style={styles.savingsText}>
+                          {annualPlan?.savings ? `Save ${annualPlan.savings}%` : 'Best Value'}
+                        </Text>
                       </View>
                     </View>
                     <View style={styles.pricingPlanRight}>
@@ -185,7 +200,7 @@ export default function PremiumModal({ visible, onClose, onPurchase, onRestore, 
                         styles.pricingPlanPrice,
                         selectedPlan === 'annual' && styles.selectedPlanText
                       ]}>
-                        $19.99
+                        {annualPlan?.localizedPrice || '$19.99'}
                       </Text>
                       <Text style={[
                         styles.pricingPlanPeriod,
@@ -199,7 +214,7 @@ export default function PremiumModal({ visible, onClose, onPurchase, onRestore, 
                     styles.pricingPlanSubtext,
                     selectedPlan === 'annual' && styles.selectedPlanSubtext
                   ]}>
-                    Just $1.67 per month • Best Value
+                    {annualPlan ? `Just ${(annualPlan.price / 12).toFixed(2).replace('.', ',')} per month` : 'Best Value'}
                   </Text>
                 </LinearGradient>
               </TouchableOpacity>
@@ -230,7 +245,7 @@ export default function PremiumModal({ visible, onClose, onPurchase, onRestore, 
                         styles.pricingPlanPrice,
                         selectedPlan === 'monthly' && styles.selectedPlanText
                       ]}>
-                        $5.99
+                        {monthlyPlan?.localizedPrice || '$5.99'}
                       </Text>
                       <Text style={[
                         styles.pricingPlanPeriod,
@@ -369,6 +384,15 @@ export default function PremiumModal({ visible, onClose, onPurchase, onRestore, 
                   <Text style={styles.errorBannerText}>{errorMessage}</Text>
                 </View>
               )}
+              <View style={styles.legalLinksContainer}>
+                <TouchableOpacity onPress={() => handleOpenURL('https://skycalm.app/privacy')}>
+                  <Text style={styles.legalLink}>Privacy Policy</Text>
+                </TouchableOpacity>
+                <View style={styles.legalSeparator} />
+                <TouchableOpacity onPress={() => handleOpenURL('https://skycalm.app/terms')}>
+                  <Text style={styles.legalLink}>Terms of Use</Text>
+                </TouchableOpacity>
+              </View>
               <Text style={styles.legalText}>
                 Subscription automatically renews unless auto-renew is turned off at least 24 hours 
                 before the end of the current period. Payment will be charged to your account at 
@@ -739,6 +763,24 @@ const createStyles = (colors: any) => StyleSheet.create({
   legalContainer: {
     paddingHorizontal: 20,
     paddingBottom: 20,
+  },
+  legalLinksContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  legalLink: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 12,
+    color: colors.textSecondary,
+    textDecorationLine: 'underline',
+  },
+  legalSeparator: {
+    width: 1,
+    height: 12,
+    backgroundColor: colors.border,
+    marginHorizontal: 10,
   },
   legalText: {
     fontFamily: 'Inter-Regular',

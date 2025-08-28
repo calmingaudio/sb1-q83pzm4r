@@ -13,7 +13,7 @@
       "enabled": true
     },
     "ios": {
-      "buildNumber": "2.3.2",
+      "buildNumber": "2.3.3",
       "supportsTablet": true,
       "bundleIdentifier": "com.skycalm.app",
       "googleServicesFile": "./GoogleService-Info.plist",
