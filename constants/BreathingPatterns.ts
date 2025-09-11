@@ -8,6 +8,7 @@ export interface BreathingPattern {
   exhaleSeconds: number;
   holdExhaleSeconds: number;
   totalCycles: number;
+  citationUrl: string;
 }
 
 export const breathingPatterns: BreathingPattern[] = [
@@ -26,6 +27,8 @@ export const breathingPatterns: BreathingPattern[] = [
     exhaleSeconds: 6,
     holdExhaleSeconds: 0,
     totalCycles: 10,
+    citationUrl:
+      "https://uhs.berkeley.edu/sites/default/files/breathing_exercises_0.pdf",
   },
   {
     id: 'deep',
@@ -42,6 +45,8 @@ export const breathingPatterns: BreathingPattern[] = [
     exhaleSeconds: 6,
     holdExhaleSeconds: 0,
     totalCycles: 10,
+    citationUrl:
+      "https://medmate.com.au/news/breathing-exercises-for-anxiety/",
   },
   {
     id: '478',
@@ -58,6 +63,8 @@ export const breathingPatterns: BreathingPattern[] = [
     exhaleSeconds: 8,
     holdExhaleSeconds: 0,
     totalCycles: 8,
+    citationUrl:
+      "https://www.drweil.com/videos-features/videos/breathing-exercises-4-7-8-breath/",
   },
   {
     id: 'box',
@@ -74,6 +81,8 @@ export const breathingPatterns: BreathingPattern[] = [
     exhaleSeconds: 4,
     holdExhaleSeconds: 4,
     totalCycles: 10,
+    citationUrl:
+      "https://www.medicinenet.com/why_do_navy_seals_use_box_breathing/article.htm",
   },
   {
     id: 'quick',
@@ -90,6 +99,8 @@ export const breathingPatterns: BreathingPattern[] = [
     exhaleSeconds: 3,
     holdExhaleSeconds: 0,
     totalCycles: 10,
+    citationUrl:
+      "https://uhs.berkeley.edu/sites/default/files/breathing_exercises_0.pdf",
   }
 ];
 

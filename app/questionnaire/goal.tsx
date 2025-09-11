@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, ColorValue } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ArrowLeft } from 'lucide-react-native';
@@ -28,7 +28,7 @@ export default function GoalScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <LinearGradient
-        colors={Colors.light.gradient.primary}
+        colors={Colors.light.gradient.primary as [ColorValue, ColorValue, ...ColorValue[]]}
         style={styles.header}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}

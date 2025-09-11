@@ -68,6 +68,7 @@ const styles = StyleSheet.create({
     padding: 20,
     borderRadius: 20,
     marginBottom: 16,
+    backgroundColor: Colors.light.primary, // Add solid background color for shadow calculation
     ...Platform.select({
       ios: {
         shadowColor: Colors.light.primary,

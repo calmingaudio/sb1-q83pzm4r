@@ -19,9 +19,9 @@ export default {
     card: '#ffffff', // White
     border: '#e2e8f0', // Slate 200
     gradient: {
-      primary: ['#0891b2', '#22d3ee', '#67e8f9'],
-      secondary: ['#059669', '#34d399', '#6ee7b7'],
-      accent: ['#7c3aed', '#8b5cf6', '#a78bfa'],
+      primary: ['#0891b2', '#22d3ee', '#67e8f9'] as const,
+      secondary: ['#059669', '#34d399', '#6ee7b7'] as const,
+      accent: ['#7c3aed', '#8b5cf6', '#a78bfa'] as const,
     }
   },
   dark: {
@@ -42,9 +42,9 @@ export default {
     card: '#1e293b',
     border: '#334155',
     gradient: {
-      primary: ['#22d3ee', '#67e8f9', '#a5f3fc'],
-      secondary: ['#34d399', '#6ee7b7', '#a7f3d0'],
-      accent: ['#8b5cf6', '#a78bfa', '#c4b5fd'],
+      primary: ['#22d3ee', '#67e8f9', '#a5f3fc'] as const,
+      secondary: ['#34d399', '#6ee7b7', '#a7f3d0'] as const,
+      accent: ['#8b5cf6', '#a78bfa', '#c4b5fd'] as const,
     }
   },
 };
